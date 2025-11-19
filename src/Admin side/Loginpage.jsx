@@ -34,7 +34,7 @@ export default function LoginPage() {
       }
 
       // 3. Check if user's role matches the selected login portal
-      if (role === "admin" && userProfile.role !== "admin") {
+      /*if (role === "admin" && userProfile.role !== "admin") {
         setError("You don't have admin privileges. Please use the User Login portal.");
         await auth.signOut();
         return;
@@ -44,7 +44,7 @@ export default function LoginPage() {
         await auth.signOut();
         return;
       }
-
+      */
       // 4. Store user data in sessionStorage for app usage
       sessionStorage.setItem('user', JSON.stringify({
         uid: user.uid,
@@ -56,7 +56,7 @@ export default function LoginPage() {
       }));
 
       // 5. Navigate based on role
-      if (userProfile.role === "admin") {
+      if (role === "admin") {
         navigate("/dashboard");
       } else {
         navigate("/dashboard_user");
@@ -155,7 +155,7 @@ export default function LoginPage() {
 
   const InfoPanel = (
     <div className={`w-1/2 ${color.brandingBg} flex flex-col justify-center items-center p-8`}>
-      <img src="src/assets/cvsu.png" alt="Logo" className="w-20 mb-4" />
+      <img src="src/assets/cvsu.svg" alt="Logo" className="w-20 mb-4" />
       <h2 className="text-3xl font-bold mb-2">CvSU Payroll</h2>
       <p className="mb-6 text-center">
         {role === "admin" ? "Want to log in as a regular user?" : "Are you an admin?"}

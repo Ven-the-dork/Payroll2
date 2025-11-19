@@ -36,7 +36,6 @@ function ActionDropdown({ onViewProfile }) {
       >
         Actions <ChevronDown size={14} />
       </button>
-
       {open && (
         <div className="absolute right-0 mt-2 w-36 bg-white rounded-md shadow-lg border border-yellow-200 z-40">
           <button
@@ -64,6 +63,9 @@ export default function EmployeeManagement() {
   // table <-> profile view
   const [profileOpen, setProfileOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+
+  // Add Employee form toggle
+  const [showAddForm, setShowAddForm] = useState(false);
 
   // left panel in profile view
   const sections = [
@@ -118,6 +120,17 @@ export default function EmployeeManagement() {
     // more rows can be added...
   ];
 
+  // Hardcoded new employee data for Add Employee form
+  const hardcodedNewEmployee = {
+    name: "New Employee",
+    department: "New Department",
+    position: "New Position",
+    startDate: "01/01/2025",
+    category: "Full time",
+    gender: "Other",
+    status: "Active",
+  };
+
   function openProfile(emp) {
     setSelectedEmployee(emp);
     setActiveSection(sections[0]);
@@ -131,10 +144,10 @@ export default function EmployeeManagement() {
   }
 
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex h-screen bg-white">
       {/* Sidebar */}
       <aside
-        className={`${
+        className={`flex-shrink-0 ${
           isOpen ? "w-64" : "w-20"
         } bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-6 transition-all duration-300 relative`}
       >
@@ -197,8 +210,8 @@ export default function EmployeeManagement() {
         </div>
       </aside>
 
-      {/* Main area */}
-      <main className="flex-1 p-8 overflow-x-hidden bg-white">
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto p-8 bg-white">
         {/* top bar */}
         <div className="flex items-center justify-between mb-6">
           <button onClick={() => setIsOpen((s) => !s)} className="text-green-700 cursor-pointer hover:text-yellow-400 transition">
@@ -225,22 +238,74 @@ export default function EmployeeManagement() {
           </div>
         </div>
 
-        <h1 className="text-3xl font-bold text-green-800 mb-6">Employee Management</h1>
+        <h1 className="text-3xl font-bold text-green-800 mb-6">
+          Employee Management
+        </h1>
 
-        {/* Container that switches between table and profile view */}
         <div className="relative">
-          {/* Table view */}
-          <div
-            className={`transition-transform duration-500 ${profileOpen ? "-translate-x-full opacity-0 pointer-events-none absolute inset-0" : "translate-x-0 opacity-100 relative"
-              }`}
-          >
+          {/* Table/Card Section */}
+          <div className={`transition-transform duration-500 ${profileOpen ? "-translate-x-full opacity-0 pointer-events-none absolute inset-0" : "translate-x-0 opacity-100 relative"}`}>
             <div className="p-6 bg-white rounded-2xl shadow-md relative">
-              <h2 className="text-lg font-semibold mb-4 text-green-800">Employee List</h2>
+              {/* Only Add Employee Button Here! */}
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => setShowAddForm((v) => !v)}
+                  className="bg-green-700 text-white px-4 py-2 rounded-md cursor-pointer  font-semibold hover:bg-yellow-400 hover:text-green-900 transition"
+                >
+                  +
+                </button>
+              </div>
+              {/* Add Employee Form below button when toggled, with smooth animation */}
+              <div
+                className={`mb-6 overflow-hidden transition-all duration-500 ease-in-out ${showAddForm ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"}`}
+              >
+                {showAddForm && (
+                  <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50 text-green-900">
+                    <h3 className="mb-2 font-semibold text-lg">Add New Employee (Hardcoded)</h3>
+                    <form>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md">
+                        <label>
+                          Employee
+                          <input type="text" readOnly value={hardcodedNewEmployee.name} className="w-full rounded border p-2" />
+                        </label>
+                        <label>
+                          Department
+                          <input type="text" readOnly value={hardcodedNewEmployee.department} className="w-full rounded border p-2" />
+                        </label>
+                        <label>
+                          Position
+                          <input type="text" readOnly value={hardcodedNewEmployee.position} className="w-full rounded border p-2" />
+                        </label>
+                        <label>
+                          Start Date
+                          <input type="text" readOnly value={hardcodedNewEmployee.startDate} className="w-full rounded border p-2" />
+                        </label>
+                        <label>
+                          Category
+                          <input type="text" readOnly value={hardcodedNewEmployee.category} className="w-full rounded border p-2" />
+                        </label>
+                        <label>
+                          Gender
+                          <input type="text" readOnly value={hardcodedNewEmployee.gender} className="w-full rounded border p-2" />
+                        </label>
+                        <label>
+                          Status
+                          <input type="text" readOnly value={hardcodedNewEmployee.status} className="w-full rounded border p-2" />
+                        </label>
+                      </div>
+                    </form>
+                  </div>
+                )}
+              </div>
+
+              <h2 className="text-lg font-semibold mb-4 text-green-800">
+                Employee List
+              </h2>
               <div className="max-h-[500px] overflow-y-auto border border-yellow-200 rounded-lg">
                 <table className="w-full border-collapse text-sm">
                   <thead className="sticky top-0 bg-yellow-200 text-green-800 z-10">
                     <tr>
-                      <th className="p-3 text-left ">Employee</th>
+                      <th className="p-3 text-left">Employee</th>
                       <th className="p-3 text-left">Department</th>
                       <th className="p-3 text-left">Position</th>
                       <th className="p-3 text-left">Start Date</th>
@@ -272,10 +337,7 @@ export default function EmployeeManagement() {
           </div>
 
           {/* Profile view */}
-          <div
-            className={`transition-transform duration-100 ${profileOpen ? "translate-x-0 opacity-100 relative" : "translate-x-full opacity-0 pointer-events-none absolute inset-0"
-              }`}
-          >
+          <div className={`transition-transform duration-100 ${profileOpen ? "translate-x-0 opacity-100 relative" : "translate-x-full opacity-0 pointer-events-none absolute inset-0"}`}>
             <div className="p-6 bg-white rounded-2xl shadow-md">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
