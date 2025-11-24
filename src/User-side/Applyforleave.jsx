@@ -177,7 +177,7 @@ function LeaveTypeCard({ days, label, onApply }) {
 
 function Modal({ onClose, leaveType }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-blur bg-opacity-40 backdrop-blur-sm">
       <div className="bg-white rounded-xl max-w-lg w-full p-8 relative shadow-lg border-2 border-blue-300 animate-fadeIn">
         <button
           onClick={onClose}
