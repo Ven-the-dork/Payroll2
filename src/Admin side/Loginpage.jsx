@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth } from "../firebaseConfig"; // Import Firebase auth
+import { auth } from "../firebaseConfig";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { supabase } from "../supabaseClient"; // Import Supabase client
+import { supabase } from "../supabaseClient";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("user");
+  const [role, setRole] = useState("user"); // which portal UI the user selected
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -24,46 +24,48 @@ export default function LoginPage() {
 
       // 2. Get user role from Supabase database
       const { data: userProfile, error: dbError } = await supabase
-        .from('users')
-        .select('role, email, full_name, department, position')
-        .eq('firebase_uid', user.uid)
+        .from("users")
+        .select("role, email, full_name, department, position")
+        .eq("firebase_uid", user.uid)
         .single();
 
-      if (dbError) {
+      if (dbError || !userProfile) {
         throw new Error("User profile not found in database. Please contact administrator.");
       }
 
       // 3. Check if user's role matches the selected login portal
-      /*if (role === "admin" && userProfile.role !== "admin") {
+      if (role === "admin" && userProfile.role !== "admin") {
         setError("You don't have admin privileges. Please use the User Login portal.");
         await auth.signOut();
         return;
       }
+
       if (role === "user" && userProfile.role === "admin") {
         setError("Admin users should use the Admin Login portal.");
         await auth.signOut();
         return;
       }
-      */
-      // 4. Store user data in sessionStorage for app usage
-      sessionStorage.setItem('user', JSON.stringify({
-        uid: user.uid,
-        email: user.email,
-        role: userProfile.role,
-        fullName: userProfile.full_name,
-        department: userProfile.department,
-        position: userProfile.position
-      }));
 
-      // 5. Navigate based on role
-      if (role === "admin") {
+      // 4. Store user data in sessionStorage for app usage
+      sessionStorage.setItem(
+        "user",
+        JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          role: userProfile.role,
+          fullName: userProfile.full_name,
+          department: userProfile.department,
+          position: userProfile.position,
+        })
+      );
+
+      // 5. Navigate based on actual role from DB (extra safety)
+      if (userProfile.role === "admin") {
         navigate("/dashboard");
       } else {
         navigate("/dashboard_user");
       }
-
     } catch (error) {
-      // Handle specific Firebase error codes
       if (error.code === "auth/user-not-found") {
         setError("No account found with this email address.");
       } else if (error.code === "auth/wrong-password") {
@@ -97,12 +99,14 @@ export default function LoginPage() {
       button: "bg-yellow-400 hover:bg-green-600 text-black",
       link: "text-green-700 hover:text-yellow-700",
       brandingBg: "bg-green-700 text-white",
-    }
+    },
   }[role];
 
   const LoginForm = (
     <div className={`w-1/2 ${color.formBg} flex flex-col justify-center items-center p-8`}>
-      <h2 className="text-3xl font-bold mb-2">{role === "admin" ? "Admin Login" : "Welcome Back !!"}</h2>
+      <h2 className="text-3xl font-bold mb-2">
+        {role === "admin" ? "Admin Login" : "Welcome Back !!"}
+      </h2>
       <p className="mb-6">
         {role === "admin"
           ? "Please enter your admin credentials"
@@ -119,7 +123,9 @@ export default function LoginPage() {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={`w-full mb-4 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 ${role === "admin" ? "focus:ring-green-300" : "focus:ring-green-700"}`}
+          className={`w-full mb-4 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 ${
+            role === "admin" ? "focus:ring-green-300" : "focus:ring-green-700"
+          }`}
           required
           disabled={loading}
         />
@@ -128,14 +134,16 @@ export default function LoginPage() {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className={`w-full mb-3 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 ${role === "admin" ? "focus:ring-green-300" : "focus:ring-green-700"}`}
+          className={`w-full mb-3 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 ${
+            role === "admin" ? "focus:ring-green-300" : "focus:ring-green-700"
+          }`}
           required
           disabled={loading}
         />
         <div className="text-right mb-4">
           <a
             href="#"
-            onClick={e => {
+            onClick={(e) => {
               e.preventDefault();
               alert("Password reset functionality coming soon!");
             }}
@@ -148,7 +156,9 @@ export default function LoginPage() {
           type="submit"
           disabled={loading}
           className={`w-full ${color.button} font-bold py-2 rounded transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
-        >{loading ? "SIGNING IN..." : "SIGN IN"}</button>
+        >
+          {loading ? "SIGNING IN..." : "SIGN IN"}
+        </button>
       </form>
     </div>
   );
@@ -163,16 +173,26 @@ export default function LoginPage() {
       <div className="flex flex-col gap-3 w-full max-w-xs">
         {role === "admin" ? (
           <button
-            onClick={() => { setRole("user"); setError(""); }}
+            onClick={() => {
+              setRole("user");
+              setError("");
+            }}
             className="w-full bg-green-700 text-white py-2 rounded font-semibold hover:bg-green-600 transition"
             disabled={loading}
-          >USER LOGIN</button>
+          >
+            USER LOGIN
+          </button>
         ) : (
           <button
-            onClick={() => { setRole("admin"); setError(""); }}
+            onClick={() => {
+              setRole("admin");
+              setError("");
+            }}
             className="w-full bg-gray-900 text-yellow-400 py-2 rounded font-semibold hover:bg-gray-700 transition"
             disabled={loading}
-          >ADMIN LOGIN</button>
+          >
+            ADMIN LOGIN
+          </button>
         )}
       </div>
     </div>
@@ -181,10 +201,17 @@ export default function LoginPage() {
   return (
     <div className={`${color.mainBg} min-h-screen flex items-center justify-center`}>
       <div className="flex w-[850px] h-[500px] bg-white rounded-2xl shadow-2xl overflow-hidden">
-        {role === "admin"
-          ? (<>{LoginForm}{InfoPanel}</>)
-          : (<>{InfoPanel}{LoginForm}</>)
-        }
+        {role === "admin" ? (
+          <>
+            {LoginForm}
+            {InfoPanel}
+          </>
+        ) : (
+          <>
+            {InfoPanel}
+            {LoginForm}
+          </>
+        )}
       </div>
     </div>
   );
