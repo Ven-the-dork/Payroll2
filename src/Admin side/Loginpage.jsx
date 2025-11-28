@@ -8,7 +8,7 @@ import cvsuLogo from "../assets/cvsu.png";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("user"); // which portal UI the user selected
+  const [role, setRole] = useState("user");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
@@ -19,11 +19,11 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // 1. Authenticate with Firebase
+      // 1. Firebase auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // 2. Get user role from Supabase database
+      // 2. Get role from Supabase
       const { data: userProfile, error: dbError } = await supabase
         .from("users")
         .select("role, email, full_name, department, position")
@@ -34,7 +34,7 @@ export default function LoginPage() {
         throw new Error("User profile not found in database. Please contact administrator.");
       }
 
-      // 3. Check if user's role matches the selected login portal
+      // 3. Role-portal checks
       if (role === "admin" && userProfile.role !== "admin") {
         setError("You don't have admin privileges. Please use the User Login portal.");
         await auth.signOut();
@@ -47,7 +47,7 @@ export default function LoginPage() {
         return;
       }
 
-      // 4. Store user data in sessionStorage for app usage
+      // 4. Store user data in sessionStorage
       sessionStorage.setItem(
         "user",
         JSON.stringify({
@@ -60,7 +60,7 @@ export default function LoginPage() {
         })
       );
 
-      // 5. Navigate based on actual role from DB (extra safety)
+      // 5. Navigate by role
       if (userProfile.role === "admin") {
         navigate("/dashboard");
       } else {
@@ -85,7 +85,7 @@ export default function LoginPage() {
     }
   };
 
-  // --- Dynamic UI based on role ---
+  // Dynamic UI per role
   const color = {
     admin: {
       mainBg: "bg-gradient-to-r from-gray-900 via-gray-800 to-green-600",
@@ -105,19 +105,21 @@ export default function LoginPage() {
 
   const LoginForm = (
     <div className={`w-1/2 ${color.formBg} flex flex-col justify-center items-center p-8`}>
-      <h2 className="text-3xl font-bold mb-2">
+      <h2 className="text-3xl font-extrabold mb-2 tracking-wide animate-[fadeInDown_0.5s_ease-out]">
         {role === "admin" ? "Admin Login" : "Welcome Back !!"}
       </h2>
-      <p className="mb-6">
+      <p className="mb-6 text-sm text-gray-600 animate-[fadeIn_0.7s_ease-out]">
         {role === "admin"
           ? "Please enter your admin credentials"
           : "Please enter your credentials to log in"}
       </p>
+
       {error && (
         <div className="w-full max-w-xs mb-4 bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm">
           {error}
         </div>
       )}
+
       <form onSubmit={handleLogin} className="w-full max-w-xs">
         <input
           type="email"
@@ -166,9 +168,15 @@ export default function LoginPage() {
 
   const InfoPanel = (
     <div className={`w-1/2 ${color.brandingBg} flex flex-col justify-center items-center p-8`}>
-      <img src={cvsuLogo} alt="Logo" className="h-16 w-auto mx-auto mb-4" />
-      <h2 className="text-3xl font-bold mb-2">CvSU Payroll</h2>
-      <p className="mb-6 text-center">
+      <img
+        src={cvsuLogo}
+        alt="CvSU logo"
+        className="h-16 w-auto mx-auto mb-4 drop-shadow-lg animate-[fadeIn_0.5s_ease-out]"
+      />
+      <h2 className="text-3xl font-extrabold tracking-wide mb-2 text-center animate-[fadeInUp_0.6s_ease-out]">
+        CvSU Payroll
+      </h2>
+      <p className="mb-6 text-center text-sm opacity-90 animate-[fadeIn_0.7s_ease-out]">
         {role === "admin" ? "Want to log in as a regular user?" : "Are you an admin?"}
       </p>
       <div className="flex flex-col gap-3 w-full max-w-xs">
