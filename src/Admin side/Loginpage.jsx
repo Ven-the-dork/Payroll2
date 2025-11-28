@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { auth } from "../firebaseConfig";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { supabase } from "../supabaseClient";
+import cvsuLogo from "../assets/cvsu.png";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -165,7 +166,7 @@ export default function LoginPage() {
 
   const InfoPanel = (
     <div className={`w-1/2 ${color.brandingBg} flex flex-col justify-center items-center p-8`}>
-      <img src="src/assets/cvsu.svg" alt="Logo" className="w-20 mb-4" />
+      <img src={cvsuLogo} alt="Logo" className="h-16 w-auto mx-auto mb-4" />
       <h2 className="text-3xl font-bold mb-2">CvSU Payroll</h2>
       <p className="mb-6 text-center">
         {role === "admin" ? "Want to log in as a regular user?" : "Are you an admin?"}
