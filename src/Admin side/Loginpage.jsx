@@ -14,34 +14,42 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  e.preventDefault();
+  setLoading(true);
+  setError("");
 
-    try {
-      // 1. Firebase auth
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+  try {
+    // 1. Firebase auth
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;   // <-- this line MUST be here
 
-      // 2. Get role from Supabase
+    console.log("LOGIN FIREBASE UID:", user.uid);
+
+    
       const { data: userProfile, error: dbError } = await supabase
-        .from("users")
-        .select("role, email, full_name, department, position")
-        .eq("firebase_uid", user.uid)
-        .single();
+      .from("employees")   // table name
+      .select("firebase_uid, role, email, full_name, department, position")
+      .eq("firebase_uid", user.uid)
+      .maybeSingle();
 
-      if (dbError || !userProfile) {
-        throw new Error("User profile not found in database. Please contact administrator.");
-      }
+    console.log("SUPABASE LOGIN RESULT:", { userProfile, dbError });
 
-      // 3. Role-portal checks
+    if (dbError) {
+      throw new Error("Failed to load user profile from database.");
+    }
+    if (!userProfile) {
+      throw new Error("User profile not found in database. Please contact administrator.");
+    }
+
+
+      
       if (role === "admin" && userProfile.role !== "admin") {
         setError("You don't have admin privileges. Please use the User Login portal.");
         await auth.signOut();
         return;
       }
 
-      if (role === "user" && userProfile.role === "admin") {
+      if (role === "user" && userProfile.role === "admin")  {
         setError("Admin users should use the Admin Login portal.");
         await auth.signOut();
         return;

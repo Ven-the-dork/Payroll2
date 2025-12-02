@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Bell, User, Settings, LogOut, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "../firebaseConfig";
 
 const DEFAULT_PROFILE = {
   name: "Abercener Iakobo",
@@ -13,10 +15,16 @@ const DEFAULT_PROFILE = {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const navigate = useNavigate();
-
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    sessionStorage.removeItem("user");
+    navigate("/", { replace: true });
+  };
+
 
   // Show these actions:
   const quickActions = [
@@ -49,7 +57,7 @@ export default function Dashboard() {
             <Bell className="w-5 h-5 text-green-600 hover:text-yellow-500 cursor-pointer transition" />
             <User className="w-5 h-5 text-green-600 hover:text-yellow-500 cursor-pointer transition" />
             <Settings className="w-5 h-5 text-green-600 hover:text-yellow-500 cursor-pointer transition" />
-            <button onClick={() => navigate("/")} className="cursor-pointer">
+            <button onClick={handleLogout} className="cursor-pointer">
               <LogOut className="w-5 h-5 text-green-600 hover:text-red-500 transition" />
             </button>
           </div>

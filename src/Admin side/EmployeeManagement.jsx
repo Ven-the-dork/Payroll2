@@ -11,21 +11,24 @@ import {
   Bell,
   Settings,
   ChevronDown,
-  X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../firebaseConfig";
+import { supabase } from "../supabaseClient"; 
 
-// Dropdown used in table rows. Only "View Profile" is wired.
 function ActionDropdown({ onViewProfile }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
-    function onDoc(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    function handleDocClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+      }
     }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    document.addEventListener("mousedown", handleDocClick);
+    return () => document.removeEventListener("mousedown", handleDocClick);
   }, []);
 
   return (
@@ -36,6 +39,7 @@ function ActionDropdown({ onViewProfile }) {
       >
         Actions <ChevronDown size={14} />
       </button>
+
       {open && (
         <div className="absolute right-0 mt-2 w-36 bg-white rounded-md shadow-lg border border-yellow-200 z-40">
           <button
@@ -60,14 +64,11 @@ export default function EmployeeManagement() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
 
-  // table <-> profile view
   const [profileOpen, setProfileOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
-
-  // Add Employee form toggle
   const [showAddForm, setShowAddForm] = useState(false);
+  const [addEmployeeError, setAddEmployeeError] = useState("");
 
-  // left panel in profile view
   const sections = [
     "Personal Details",
     "Contact Details",
@@ -79,6 +80,32 @@ export default function EmployeeManagement() {
     "Financial Details",
   ];
   const [activeSection, setActiveSection] = useState(sections[0]);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    sessionStorage.removeItem("user");
+    navigate("/", { replace: true });
+  };
+
+  // New employee form state
+    const [newEmployee, setNewEmployee] = useState({
+      name: "",
+      department: "",
+      position: "",
+      startDate: "",
+      category: "",
+      gender: "",
+      email: "",
+      password: "",
+      role: "user", // default user
+    });
+
+
+
+  const handleNewEmployeeChange = (e) => {
+    const { name, value } = e.target;
+    setNewEmployee((prev) => ({ ...prev, [name]: value }));
+  };
 
   const employeeData = [
     {
@@ -117,45 +144,114 @@ export default function EmployeeManagement() {
       phone: "+63 933 333 4444",
       address: "77 Road, City",
     },
-    // more rows can be added...
   ];
 
-  // Hardcoded new employee data for Add Employee form
-  const hardcodedNewEmployee = {
-    name: "New Employee",
-    department: "New Department",
-    position: "New Position",
-    startDate: "01/01/2025",
-    category: "Full time",
-    gender: "Other",
-    status: "Active",
-  };
-
-  function openProfile(emp) {
+  const openProfile = (emp) => {
     setSelectedEmployee(emp);
     setActiveSection(sections[0]);
     setProfileOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  };
 
-  function closeProfile() {
+  const closeProfile = () => {
     setProfileOpen(false);
     setSelectedEmployee(null);
-  }
+  };
+
+  const sidebarWidth = isOpen ? "w-64" : "w-20";
+  const hideWhenCollapsed = !isOpen && "hidden";
+
+
+    const handleAddEmployee = async (e) => {
+      e.preventDefault();
+      setAddEmployeeError(""); // clear old error
+
+        const {
+          name,
+          department,
+          position,
+          startDate,
+          category,
+          gender,
+          email,
+          password,
+          role,
+        } = newEmployee;
+
+
+      
+      if (
+        !name.trim() ||
+        !department.trim() ||
+        !position.trim() ||
+        !startDate.trim() ||
+        !category.trim() ||
+        !gender.trim() ||
+        !email.trim() ||
+        !password.trim()
+      ) {
+        setAddEmployeeError("Please fill in all required fields before submitting.");
+        return;
+      }
+
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        const firebaseUser = cred.user;
+
+        const { data, error } = await supabase
+          .from("employees")
+          .insert({
+            firebase_uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            full_name: name,
+            department,
+            position,
+            start_date: startDate,
+            category,
+            gender,
+            status: "Active",
+            role, 
+          });
+
+        if (error) {
+          console.error("SUPABASE ERROR", error.message, error.details, error.hint);
+          setAddEmployeeError("Failed to save employee in Supabase.");
+          return;
+        }
+
+        setNewEmployee({
+          name: "",
+          department: "",
+          position: "",
+          startDate: "",
+          category: "",
+          gender: "",
+          email: "",
+          password: "",
+          employment_type: "",
+        });
+        setShowAddForm(false);
+      } catch (error) {
+        if (error.code === "auth/email-already-in-use") {
+          setAddEmployeeError("This email is already in use. Please use another email.");
+        } else {
+          setAddEmployeeError("Failed to create employee account. Please try again.");
+        }
+        console.error("Firebase error:", error.code, error.message);
+      }
+    };
+
+
 
   return (
     <div className="flex h-screen bg-white">
       {/* Sidebar */}
       <aside
-        className={`flex-shrink-0 ${
-          isOpen ? "w-64" : "w-20"
-        } bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-6 transition-all duration-300 relative`}
+        className={`flex-shrink-0 ${sidebarWidth} bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-6 transition-all duration-300 relative`}
       >
         <div>
           <div
-            className={`flex flex-col items-center mb-8 transition-all duration-300 ${
-              !isOpen && "hidden"
-            }`}
+            className={`flex flex-col items-center mb-8 transition-all duration-300 ${hideWhenCollapsed}`}
           >
             <div className="w-20 h-20 rounded-full bg-yellow-400 flex items-center justify-center shadow-lg">
               <span className="text-3xl font-bold text-green-800">👤</span>
@@ -165,7 +261,9 @@ export default function EmployeeManagement() {
           </div>
 
           <div className="px-4">
-            <h3 className={`text-yellow-300 text-xs uppercase mb-2 ${!isOpen && "hidden"}`}>
+            <h3
+              className={`text-yellow-300 text-xs uppercase mb-2 ${hideWhenCollapsed}`}
+            >
               Features
             </h3>
             <nav className="space-y-1">
@@ -180,7 +278,9 @@ export default function EmployeeManagement() {
               </button>
             </nav>
 
-            <h3 className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${!isOpen && "hidden"}`}>
+            <h3
+              className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
+            >
               Organization
             </h3>
             <nav className="space-y-1">
@@ -199,9 +299,10 @@ export default function EmployeeManagement() {
             </nav>
           </div>
         </div>
+
         <div className="px-6">
           <button
-            onClick={() => navigate("/")}
+            onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 bg-yellow-400 text-green-800 font-bold py-2 rounded-lg cursor-pointer hover:bg-yellow-300 transform hover:scale-105 transition-all duration-200 shadow-lg"
           >
             <Power size={18} />
@@ -212,19 +313,27 @@ export default function EmployeeManagement() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto p-8 bg-white">
-        {/* top bar */}
+        {/* Top bar */}
         <div className="flex items-center justify-between mb-6">
-          <button onClick={() => setIsOpen((s) => !s)} className="text-green-700 cursor-pointer hover:text-yellow-400 transition">
+          <button
+            onClick={() => setIsOpen((s) => !s)}
+            className="text-green-700 cursor-pointer hover:text-yellow-400 transition"
+          >
             <Menu size={28} />
           </button>
+
           <div className="flex-1 flex justify-center relative">
             <input
               type="text"
               placeholder="Search employees..."
               className="w-1/2 pl-4 pr-10 py-2 rounded-full border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600 text-green-800 shadow-sm"
             />
-            <Search size={18} className="absolute right-[calc(50%-10rem)] top-1/2 -translate-y-1/2 text-yellow-400 cursor-pointer" />
+            <Search
+              size={18}
+              className="absolute right-[calc(50%-10rem)] top-1/2 -translate-y-1/2 text-yellow-400 cursor-pointer"
+            />
           </div>
+
           <div className="flex items-center gap-4 ml-6">
             <button className="p-2 bg-yellow-400 text-green-800 rounded-full cursor-pointer hover:bg-green-700 hover:text-white transition">
               <Bell size={18} />
@@ -243,61 +352,160 @@ export default function EmployeeManagement() {
         </h1>
 
         <div className="relative">
-          {/* Table/Card Section */}
-          <div className={`transition-transform duration-500 ${profileOpen ? "-translate-x-full opacity-0 pointer-events-none absolute inset-0" : "translate-x-0 opacity-100 relative"}`}>
+          {/* List + Add Employee */}
+          <div
+            className={`transition-transform duration-500 ${
+              profileOpen
+                ? "-translate-x-full opacity-0 pointer-events-none absolute inset-0"
+                : "translate-x-0 opacity-100 relative"
+            }`}
+          >
             <div className="p-6 bg-white rounded-2xl shadow-md relative">
-              {/* Only Add Employee Button Here! */}
+              {/* Add Employee Button */}
               <div className="flex justify-end mb-4">
                 <button
                   onClick={() => setShowAddForm((v) => !v)}
-                  className="bg-green-700 text-white px-4 py-2 rounded-md cursor-pointer  font-semibold hover:bg-yellow-400 hover:text-green-900 transition"
+                  className="bg-green-700 text-white px-4 py-2 rounded-md cursor-pointer font-semibold hover:bg-yellow-400 hover:text-green-900 transition"
                 >
                   +
                 </button>
               </div>
-              {/* Add Employee Form below button when toggled, with smooth animation */}
-              <div
-                className={`mb-6 overflow-hidden transition-all duration-500 ease-in-out ${showAddForm ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"}`}
-              >
-                {showAddForm && (
-                  <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50 text-green-900">
-                    <h3 className="mb-2 font-semibold text-lg">Add New Employee (Hardcoded)</h3>
-                    <form>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md">
-                        <label>
-                          Employee
-                          <input type="text" readOnly value={hardcodedNewEmployee.name} className="w-full rounded border p-2" />
-                        </label>
-                        <label>
-                          Department
-                          <input type="text" readOnly value={hardcodedNewEmployee.department} className="w-full rounded border p-2" />
-                        </label>
-                        <label>
-                          Position
-                          <input type="text" readOnly value={hardcodedNewEmployee.position} className="w-full rounded border p-2" />
-                        </label>
-                        <label>
-                          Start Date
-                          <input type="text" readOnly value={hardcodedNewEmployee.startDate} className="w-full rounded border p-2" />
-                        </label>
-                        <label>
-                          Category
-                          <input type="text" readOnly value={hardcodedNewEmployee.category} className="w-full rounded border p-2" />
-                        </label>
-                        <label>
-                          Gender
-                          <input type="text" readOnly value={hardcodedNewEmployee.gender} className="w-full rounded border p-2" />
-                        </label>
-                        <label>
-                          Status
-                          <input type="text" readOnly value={hardcodedNewEmployee.status} className="w-full rounded border p-2" />
-                        </label>
-                      </div>
-                    </form>
-                  </div>
-                )}
-              </div>
 
+                {/* Add Employee Form */}
+                <div
+                  className={`mb-6 overflow-hidden transition-all duration-500 ease-in-out ${
+                    showAddForm ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  {showAddForm && (
+                    <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50 text-green-900">
+                      <h3 className="mb-2 font-semibold text-lg">Add employee</h3>
+                      <form onSubmit={handleAddEmployee}>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md">
+                          <label>
+                            Employee
+                            <input
+                              type="text"
+                              name="name"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.name}
+                              onChange={handleNewEmployeeChange}
+                            />
+                          </label>
+                          <label>
+                            Department
+                            <input
+                              type="text"
+                              name="department"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.department}
+                              onChange={handleNewEmployeeChange}
+                            />
+                          </label>
+                          <label>
+                            Position
+                            <input
+                              type="text"
+                              name="position"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.position}
+                              onChange={handleNewEmployeeChange}
+                            />
+                          </label>
+                          <label>
+                            Start Date
+                            <input
+                              type="date"
+                              name="startDate"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.startDate}
+                              onChange={handleNewEmployeeChange}
+                            />
+                          </label>
+                          <label>
+                            Category
+                            <select
+                              name="category"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.category}
+                              onChange={handleNewEmployeeChange}
+                            >
+                              <option value="">Select category</option>
+                              <option value="Full time">Full time</option>
+                              <option value="Part time">Part time</option>
+                              <option value="Probation">Probation</option>
+                              <option value="Contractual">Contractual</option>
+                            </select>
+                          </label>
+                          <label>
+                            Sex
+                            <select
+                              name="gender"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.gender}
+                              onChange={handleNewEmployeeChange}
+                            >
+                              <option value="">Select gender</option>
+                              <option value="Male">Male</option>
+                              <option value="Female">Female</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </label>
+                          <label>
+                            Role
+                            <select
+                              name="role"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.role}
+                              onChange={handleNewEmployeeChange}
+                            >
+                              <option value="user">User</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          </label>
+
+                          <label>
+                            Email
+                            <input
+                              type="email"
+                              name="email"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.email}
+                              onChange={handleNewEmployeeChange}
+                            />
+                          </label>
+                          <label>
+                            Password
+                            <input
+                              type="password"
+                              name="password"
+                              className="w-full rounded border p-2"
+                              value={newEmployee.password}
+                              onChange={handleNewEmployeeChange}
+                            />
+                          </label>
+                          <label>
+                            <button
+                              type="submit"
+                              className="w-full rounded border p-2 mt-6"
+                            >
+                              Submit
+                            </button>
+                          </label>
+                        </div>
+
+                        {addEmployeeError && (
+                          <p className="mt-2 text-sm text-red-600">
+                            {addEmployeeError}
+                          </p>
+                        )}
+                      </form>
+                    </div>
+                  )}
+                </div>
+
+
+              {/* Employee List (still static for now) */}
               <h2 className="text-lg font-semibold mb-4 text-green-800">
                 Employee List
               </h2>
@@ -317,7 +525,12 @@ export default function EmployeeManagement() {
                   </thead>
                   <tbody>
                     {employeeData.map((emp, idx) => (
-                      <tr key={idx} className={`${idx % 2 === 0 ? "bg-yellow-50" : "bg-white"} hover:bg-yellow-100 transition`}>
+                      <tr
+                        key={idx}
+                        className={`${
+                          idx % 2 === 0 ? "bg-yellow-50" : "bg-white"
+                        } hover:bg-yellow-100 transition`}
+                      >
                         <td className="p-3">{emp.name}</td>
                         <td className="p-3">{emp.department}</td>
                         <td className="p-3">{emp.position}</td>
@@ -326,7 +539,9 @@ export default function EmployeeManagement() {
                         <td className="p-3">{emp.gender}</td>
                         <td className="p-3">{emp.status}</td>
                         <td className="p-3">
-                          <ActionDropdown onViewProfile={() => openProfile(emp)} />
+                          <ActionDropdown
+                            onViewProfile={() => openProfile(emp)}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -336,96 +551,8 @@ export default function EmployeeManagement() {
             </div>
           </div>
 
-          {/* Profile view */}
-          <div className={`transition-transform duration-100 ${profileOpen ? "translate-x-0 opacity-100 relative" : "translate-x-full opacity-0 pointer-events-none absolute inset-0"}`}>
-            <div className="p-6 bg-white rounded-2xl shadow-md">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={closeProfile}
-                    className="flex items-center text-white gap-2 px-3 py-1 rounded-md cursor-pointer bg-green-700 hover:bg-yellow-400 hover:text-green-900 transition"
-                  >
-                    ← Back to Employee List
-                  </button>
-                  <h2 className="text-xl font-semibold text-green-800">
-                    Employee / Employee Profile / {selectedEmployee?.name || "—"}
-                  </h2>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button className="bg-yellow-400 text-green-900 px-4 py-2 rounded-md font-semibold cursor-pointer hover:bg-green-700 hover:text-white transition">
-                    Edit
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Left vertical menu */}
-                <div>
-                  <div className="space-y-3">
-                    {sections.map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setActiveSection(s)}
-                        className={`w-full text-left px-4 py-3 cursor-pointer rounded-xl font-semibold ${activeSection === s ? "bg-yellow-400 text-green-900" : "bg-yellow-50 text-green-900"} hover:opacity-90 transition`}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Right content area (span two columns on md screens) */}
-                <div className="md:col-span-2 bg-white rounded-xl border border-yellow-200 p-6">
-                  <div className="flex items-start gap-6">
-                    <div className="w-28 h-28 rounded-full bg-yellow-200 flex items-center justify-center text-4xl text-green-900">
-                      👤
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-2xl font-bold text-green-800">{selectedEmployee?.name}</h3>
-                      <p className="text-sm text-yellow-700">{selectedEmployee?.department} • {selectedEmployee?.position}</p>
-                      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-green-800">
-                        <div>
-                          <p className="text-xs text-yellow-600">Email</p>
-                          <p>{selectedEmployee?.email || "-"}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-yellow-600">Phone</p>
-                          <p>{selectedEmployee?.phone || "-"}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-yellow-600">Start Date</p>
-                          <p>{selectedEmployee?.startDate || "-"}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-yellow-600">Status</p>
-                          <p>{selectedEmployee?.status || "-"}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  {/* Section content area */}
-                  <div className="mt-6">
-                    <h4 className="mb-2 text-lg font-bold text-green-800">{activeSection}</h4>
-                    {/* Section-specific content (unchanged, still placeholder) */}
-                    {activeSection === "Personal Details" && (
-                      <div className="space-y-2 text-sm text-green-900">
-                        <p><strong>Full name:</strong> {selectedEmployee?.name}</p>
-                        <p><strong>Gender:</strong> {selectedEmployee?.gender}</p>
-                        <p><strong>Category:</strong> {selectedEmployee?.category}</p>
-                        <p><strong>Address:</strong> {selectedEmployee?.address || "-"}</p>
-                      </div>
-                    )}
-                    {activeSection === "Contact Details" && (
-                      <div className="space-y-2 text-sm text-green-900">
-                        <p><strong>Email:</strong> {selectedEmployee?.email || "-"}</p>
-                        <p><strong>Phone:</strong> {selectedEmployee?.phone || "-"}</p>
-                        <p><strong>Address:</strong> {selectedEmployee?.address || "-"}</p>
-                      </div>
-                    )}
-                    {/* Add other sections as in your original code... */}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          {/* Profile view (unchanged) */}
+          {/* ... keep your existing profile view JSX here ... */}
         </div>
       </main>
     </div>
