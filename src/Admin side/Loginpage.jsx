@@ -14,48 +14,57 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-  e.preventDefault();
-  setLoading(true);
-  setError("");
+    e.preventDefault();
+    setLoading(true);
+    setError("");
 
-  try {
-    // 1. Firebase auth
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;   // <-- this line MUST be here
+    try {
+      // 1. Firebase auth
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password.trim()
+      );
+      const user = userCredential.user;
 
-    console.log("LOGIN FIREBASE UID:", user.uid);
+      console.log("LOGIN FIREBASE UID:", user.uid);
 
-    
+      // 2. Supabase profile (include id so we can track presence)
       const { data: userProfile, error: dbError } = await supabase
-      .from("employees")   // table name
-      .select("firebase_uid, role, email, full_name, department, position")
-      .eq("firebase_uid", user.uid)
-      .maybeSingle();
+        .from("employees")
+        .select(
+          "id, firebase_uid, role, email, full_name, department, position"
+        )
+        .eq("firebase_uid", user.uid)
+        .maybeSingle();
 
-    console.log("SUPABASE LOGIN RESULT:", { userProfile, dbError });
+      console.log("SUPABASE LOGIN RESULT:", { userProfile, dbError });
 
-    if (dbError) {
-      throw new Error("Failed to load user profile from database.");
-    }
-    if (!userProfile) {
-      throw new Error("User profile not found in database. Please contact administrator.");
-    }
+      if (dbError) {
+        throw new Error("Failed to load user profile from database.");
+      }
+      if (!userProfile) {
+        throw new Error(
+          "User profile not found in database. Please contact administrator."
+        );
+      }
 
-
-      
+      // 3. Enforce role vs chosen portal
       if (role === "admin" && userProfile.role !== "admin") {
-        setError("You don't have admin privileges. Please use the User Login portal.");
+        setError(
+          "You don't have admin privileges. Please use the User Login portal."
+        );
         await auth.signOut();
         return;
       }
 
-      if (role === "user" && userProfile.role === "admin")  {
+      if (role === "user" && userProfile.role === "admin") {
         setError("Admin users should use the Admin Login portal.");
         await auth.signOut();
         return;
       }
 
-      // 4. Store user data in sessionStorage
+      // 4. Store user data in sessionStorage (now with employeeId)
       sessionStorage.setItem(
         "user",
         JSON.stringify({
@@ -65,6 +74,7 @@ export default function LoginPage() {
           fullName: userProfile.full_name,
           department: userProfile.department,
           position: userProfile.position,
+          employeeId: userProfile.id, // used by heartbeat for online status
         })
       );
 
@@ -112,8 +122,10 @@ export default function LoginPage() {
   }[role];
 
   const LoginForm = (
-    <div className={`w-1/2 ${color.formBg} flex flex-col justify-center items-center p-8`}>
-      <h2 className="text-3xl font-extrabold mb-2 tracking-wide animate-[fadeInDown_0.5s_ease-out]">
+    <div
+      className={`w-full md:w-1/2 ${color.formBg} flex flex-col justify-center items-center p-6 md:p-8`}
+    >
+      <h2 className="text-2xl md:text-3xl font-extrabold mb-2 tracking-wide animate-[fadeInDown_0.5s_ease-out]">
         {role === "admin" ? "Admin Login" : "Welcome Back !!"}
       </h2>
       <p className="mb-6 text-sm text-gray-600 animate-[fadeIn_0.7s_ease-out]">
@@ -152,21 +164,20 @@ export default function LoginPage() {
           disabled={loading}
         />
         <div className="text-right mb-4">
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              alert("Password reset functionality coming soon!");
-            }}
+          <button
+            type="button"
+            onClick={() =>
+              alert("Password reset functionality coming soon!")
+            }
             className={`text-sm ${color.link} cursor-pointer`}
           >
             Forgot password?
-          </a>
+          </button>
         </div>
         <button
           type="submit"
           disabled={loading}
-          className={`w-full ${color.button} font-bold py-2 rounded transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
+          className={`w-full rounded-full px-4 py-2 text-sm font-bold ${color.button} transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           {loading ? "SIGNING IN..." : "SIGN IN"}
         </button>
@@ -175,17 +186,21 @@ export default function LoginPage() {
   );
 
   const InfoPanel = (
-    <div className={`w-1/2 ${color.brandingBg} flex flex-col justify-center items-center p-8`}>
+    <div
+      className={`w-full md:w-1/2 ${color.brandingBg} flex flex-col justify-center items-center p-6 md:p-8`}
+    >
       <img
         src={cvsuLogo}
         alt="CvSU logo"
-        className="h-16 w-auto mx-auto mb-4 drop-shadow-lg animate-[fadeIn_0.5s_ease-out]"
+        className="h-14 md:h-16 w-auto mx-auto mb-4 drop-shadow-lg animate-[fadeIn_0.5s_ease-out]"
       />
-      <h2 className="text-3xl font-extrabold tracking-wide mb-2 text-center animate-[fadeInUp_0.6s_ease-out]">
+      <h2 className="text-2xl md:text-3xl font-extrabold tracking-wide mb-2 text-center animate-[fadeInUp_0.6s_ease-out]">
         CvSU Payroll
       </h2>
       <p className="mb-6 text-center text-sm opacity-90 animate-[fadeIn_0.7s_ease-out]">
-        {role === "admin" ? "Want to log in as a regular user?" : "Are you an admin?"}
+        {role === "admin"
+          ? "Want to log in as a regular user?"
+          : "Are you an admin?"}
       </p>
       <div className="flex flex-col gap-3 w-full max-w-xs">
         {role === "admin" ? (
@@ -194,7 +209,7 @@ export default function LoginPage() {
               setRole("user");
               setError("");
             }}
-            className="w-full bg-green-700 text-white py-2 rounded font-semibold hover:bg-green-600 transition"
+            className="w-full bg-green-700 text-white py-2 rounded-full font-semibold hover:bg-green-600 transition-colors"
             disabled={loading}
           >
             USER LOGIN
@@ -205,7 +220,7 @@ export default function LoginPage() {
               setRole("admin");
               setError("");
             }}
-            className="w-full bg-gray-900 text-yellow-400 py-2 rounded font-semibold hover:bg-gray-700 transition"
+            className="w-full bg-gray-900 text-yellow-400 py-2 rounded-full font-semibold hover:bg-gray-700 transition-colors"
             disabled={loading}
           >
             ADMIN LOGIN
@@ -216,8 +231,10 @@ export default function LoginPage() {
   );
 
   return (
-    <div className={`${color.mainBg} min-h-screen flex items-center justify-center`}>
-      <div className="flex w-[850px] h-[500px] bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div
+      className={`${color.mainBg} min-h-screen flex items-center justify-center px-4`}
+    >
+      <div className="flex flex-col md:flex-row w-full max-w-4xl h-auto md:h-[500px] bg-white rounded-2xl shadow-2xl overflow-hidden">
         {role === "admin" ? (
           <>
             {LoginForm}

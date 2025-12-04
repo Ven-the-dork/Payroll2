@@ -17,7 +17,7 @@ import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
 
-function ActionDropdown({ onViewProfile }) {
+function ActionDropdown({ onViewProfile, onDelete }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -35,24 +35,30 @@ function ActionDropdown({ onViewProfile }) {
     <div className="relative inline-block text-left" ref={ref}>
       <button
         onClick={() => setOpen((s) => !s)}
-        className="flex items-center gap-2 bg-green-700 text-white cursor-pointer px-4 py-1 rounded-md shadow hover:bg-yellow-400 hover:text-green-900 transition font-semibold"
+        className="inline-flex items-center gap-2 rounded-full bg-green-700 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
       >
         Actions <ChevronDown size={14} />
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-36 bg-white rounded-md shadow-lg border border-yellow-200 z-40">
+        <div className="absolute right-0 mt-2 w-40 rounded-md bg-white shadow-lg border border-yellow-200 z-40 overflow-hidden">
           <button
             onClick={() => {
               setOpen(false);
               onViewProfile();
             }}
-            className="block bg-green-500 w-full text-left px-4 py-2 text-white rounded-md cursor-pointer hover:bg-yellow-400 hover:text-green-900 transition"
+            className="block w-full text-left px-4 py-2 text-sm text-green-900 hover:bg-yellow-50 cursor-pointer"
           >
             View Profile
           </button>
-          <button className="block bg-green-500 w-full text-left px-4 py-2 text-white rounded-md cursor-pointer hover:bg-yellow-400 hover:text-green-900 transition">
-            Edit Profile
+          <button
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+            className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer"
+          >
+            Delete
           </button>
         </div>
       )}
@@ -68,6 +74,7 @@ export default function EmployeeManagement() {
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addEmployeeError, setAddEmployeeError] = useState("");
+  const [currentUser, setCurrentUser] = useState(null);
 
   const sections = [
     "Personal Details",
@@ -97,14 +104,14 @@ export default function EmployeeManagement() {
     gender: "",
     email: "",
     password: "",
-    role: "user", // default user
+    role: "user",
   });
 
   const handleNewEmployeeChange = (e) => {
     const { name, value } = e.target;
     setNewEmployee((prev) => ({ ...prev, [name]: value }));
   };
-
+  
   const [employeeData, setEmployeeData] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [employeesError, setEmployeesError] = useState("");
@@ -121,7 +128,7 @@ export default function EmployeeManagement() {
       let query = supabase
         .from("employees")
         .select(
-          "full_name, department, position, start_date, category, gender, status, role"
+          "id, firebase_uid, full_name, department, position, start_date, category, gender, status, last_seen, role"
         )
         .neq("role", "admin")
         .order(sortField, { ascending: sortDirection === "asc" });
@@ -135,19 +142,29 @@ export default function EmployeeManagement() {
 
       const { data: latest, error: fetchError } = await query;
 
+      console.log("RAW employees from Supabase:", latest);
+
       if (fetchError) {
         console.error("Error loading employees:", fetchError.message);
         setEmployeesError("Failed to load employees. Please try again.");
       } else if (latest) {
-        const mapped = latest.map((row) => ({
-          name: row.full_name,
-          department: row.department,
-          position: row.position,
-          startDate: row.start_date,
-          category: row.category,
-          gender: row.gender,
-          status: row.status || "Active",
-        }));
+        const mapped = latest.map((row) => {
+          const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
+          const isRecent =
+            lastSeen && Date.now() - lastSeen.getTime() < 30_000; // 30s
+
+          return {
+            id: row.id,
+            firebaseUid: row.firebase_uid,
+            name: row.full_name,
+            department: row.department,
+            position: row.position,
+            startDate: row.start_date,
+            category: row.category,
+            gender: row.gender,
+            status: isRecent ? "Active" : "Inactive",
+          };
+        });
         setEmployeeData(mapped);
       }
 
@@ -168,13 +185,14 @@ export default function EmployeeManagement() {
     setProfileOpen(false);
     setSelectedEmployee(null);
   };
+  
 
   const sidebarWidth = isOpen ? "lg:w-64" : "lg:w-20";
   const hideWhenCollapsed = !isOpen && "hidden lg:block";
 
   const handleAddEmployee = async (e) => {
     e.preventDefault();
-    setAddEmployeeError(""); // clear old error
+    setAddEmployeeError("");
 
     const {
       name,
@@ -234,7 +252,7 @@ export default function EmployeeManagement() {
         gender: "",
         email: "",
         password: "",
-        role: "user", // keep default
+        role: "user",
       });
 
       setShowAddForm(false);
@@ -243,7 +261,7 @@ export default function EmployeeManagement() {
       let query = supabase
         .from("employees")
         .select(
-          "full_name, department, position, start_date, category, gender, status, role"
+          "id, firebase_uid, full_name, department, position, start_date, category, gender, status, last_seen, role"
         )
         .neq("role", "admin")
         .order(sortField, { ascending: sortDirection === "asc" });
@@ -257,16 +275,26 @@ export default function EmployeeManagement() {
 
       const { data: latest, error: fetchError } = await query;
 
+      console.log("RAW employees after insert:", latest);
+
       if (!fetchError && latest) {
-        const mapped = latest.map((row) => ({
-          name: row.full_name,
-          department: row.department,
-          position: row.position,
-          startDate: row.start_date,
-          category: row.category,
-          gender: row.gender,
-          status: row.status || "Active",
-        }));
+        const mapped = latest.map((row) => {
+          const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
+          const isRecent =
+            lastSeen && Date.now() - lastSeen.getTime() < 30_000;
+
+          return {
+            id: row.id,
+            firebaseUid: row.firebase_uid,
+            name: row.full_name,
+            department: row.department,
+            position: row.position,
+            startDate: row.start_date,
+            category: row.category,
+            gender: row.gender,
+            status: isRecent ? "Active" : "Inactive",
+          };
+        });
         setEmployeeData(mapped);
       }
     } catch (error) {
@@ -279,11 +307,49 @@ export default function EmployeeManagement() {
     }
   };
 
+  // delete handler
+  const handleDeleteEmployee = async (emp) => {
+    console.log("emp in delete:", emp);
+
+    const ok = window.confirm(
+      `Are you sure you want to delete ${emp.name}? This action cannot be undone.`
+    );
+    if (!ok) return;
+
+    const { data, error } = await supabase
+      .from("employees")
+      .delete()
+      .eq("id", emp.id)
+      .select("*");
+
+    console.log("Deleted rows:", data, "Error:", error);
+
+    if (error) {
+      console.error("Error deleting employee:", error.message);
+      alert("Failed to delete employee. Please try again.");
+      return;
+    }
+
+    setEmployeeData((prev) => prev.filter((e) => e.id !== emp.id));
+  };
+
+  // Load current user from sessionStorage
+  useEffect(() => {
+    const stored = sessionStorage.getItem("user");
+    if (stored) {
+      try {
+        setCurrentUser(JSON.parse(stored));
+      } catch {
+        setCurrentUser(null);
+      }
+    }
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white">
       {/* Sidebar */}
       <aside
-        className={`w-full lg:flex-shrink-0 ${sidebarWidth} bg-green-700 text-white lg:rounded-r-lg flex flex-row lg:flex-col justify-between py-4 lg:py-6 transition-all duration-300 relative`}
+        className={`w-full lg:flex-shrink-0 ${sidebarWidth} max-w-full bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-4 lg:py-6 transition-all duration-300 relative`}
       >
         <div>
           <div
@@ -295,9 +361,11 @@ export default function EmployeeManagement() {
               </span>
             </div>
             <h2 className="mt-3 text-base lg:text-lg text-white font-bold">
-              Name
+              {currentUser?.fullName}
             </h2>
-            <p className="text-yellow-300 text-xs lg:text-sm">Position</p>
+            <p className="text-yellow-300 text-xs lg:text-sm">
+              {currentUser?.position}
+            </p>
           </div>
 
           <div className="px-4">
@@ -309,12 +377,9 @@ export default function EmployeeManagement() {
             <nav className="space-y-1">
               <button
                 onClick={() => navigate("/dashboard")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-yellow-300 hover:text-green-900 transition font-semibold text-sm"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
                 <LayoutDashboard size={18} /> {isOpen && "Dashboard"}
-              </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-yellow-300 hover:text-green-900 transition font-semibold text-sm">
-                <Mail size={18} /> {isOpen && "Messages"}
               </button>
             </nav>
 
@@ -324,16 +389,16 @@ export default function EmployeeManagement() {
               Organization
             </h3>
             <nav className="space-y-1">
-              <button className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-lg bg-yellow-400 text-green-900 font-semibold transition text-sm">
+              <button className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm">
                 <Users size={18} /> {isOpen && "Employee Management"}
               </button>
               <button
                 onClick={() => navigate("/leave-management")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-yellow-300 hover:text-green-900 transition font-semibold text-sm"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
                 <CalendarDays size={18} /> {isOpen && "Leave Management"}
               </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-yellow-300 hover:text-green-900 transition font-semibold text-sm">
+              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm">
                 <CreditCard size={18} /> {isOpen && "Payroll Management"}
               </button>
             </nav>
@@ -343,7 +408,7 @@ export default function EmployeeManagement() {
         <div className="px-4 lg:px-6 mt-4 lg:mt-0">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 bg-yellow-400 text-green-800 font-bold py-2 rounded-lg cursor-pointer hover:bg-yellow-300 transform hover:scale-105 transition-all duration-200 shadow-lg text-sm"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
           >
             <Power size={18} />
             {isOpen && "Log Out"}
@@ -352,41 +417,51 @@ export default function EmployeeManagement() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 bg-white">
+      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
         {/* Top bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <button
             onClick={() => setIsOpen((s) => !s)}
-            className="text-green-700 cursor-pointer hover:text-yellow-400 transition self-start"
+            className="self-start text-green-700 cursor-pointer hover:text-yellow-400 transition"
           >
             <Menu size={28} />
           </button>
 
-          <div className="flex-1 flex flex-col items-center">
-            <div className="w-full flex justify-center relative mb-2">
+          <div className="flex-1 flex flex-col items-center md:items-center">
+            {/* Search */}
+            <div className="w-full md:max-w-xl relative mb-2">
               <input
                 type="text"
                 placeholder="Search employees..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full max-w-md pl-4 pr-10 py-2 rounded-full border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600 text-green-800 shadow-sm text-sm"
+                className="w-full rounded-full border-2 border-yellow-300 px-4 pr-10 py-2 text-sm md:text-base text-green-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
               />
               <Search
                 size={18}
-                className="absolute right-[calc(32%-2.5rem)] top-1/2 -translate-y-1/2 text-yellow-400 cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-yellow-400 cursor-pointer"
               />
             </div>
 
+            {/* Sort toolbar */}
             <div className="flex flex-wrap justify-center gap-2 text-xs sm:text-sm">
               <button
                 onClick={() => setSortField("full_name")}
-                className="px-2 py-1 border rounded"
+                className={`px-3 py-1.5 rounded-full border text-xs sm:text-sm transition ${
+                  sortField === "full_name"
+                    ? "bg-green-700 border-green-700 text-white"
+                    : "bg-white border-yellow-300 text-green-800 hover:bg-yellow-100"
+                }`}
               >
                 Sort by Name
               </button>
               <button
                 onClick={() => setSortField("start_date")}
-                className="px-2 py-1 border rounded"
+                className={`px-3 py-1.5 rounded-full border text-xs sm:text-sm transition ${
+                  sortField === "start_date"
+                    ? "bg-green-700 border-green-700 text-white"
+                    : "bg-white border-yellow-300 text-green-800 hover:bg-yellow-100"
+                }`}
               >
                 Sort by Start Date
               </button>
@@ -394,27 +469,29 @@ export default function EmployeeManagement() {
                 onClick={() =>
                   setSortDirection((d) => (d === "asc" ? "desc" : "asc"))
                 }
-                className="px-2 py-1 border rounded"
+                className="px-3 py-1.5 rounded-full border border-yellow-300 bg-white text-xs sm:text-sm text-green-800 hover:bg-yellow-100 transition"
               >
-                {sortDirection === "asc" ? "Asc" : "Desc"}
+                {sortDirection === "asc" ? "Asc ▲" : "Desc ▼"}
               </button>
             </div>
           </div>
 
+          {/* Icon buttons */}
           <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">
-            <button className="p-1.5 sm:p-2 bg-yellow-400 text-green-800 rounded-full cursor-pointer hover:bg-green-700 hover:text-white transition">
+            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
               <Bell size={18} />
             </button>
-            <button className="p-1.5 sm:p-2 bg-yellow-400 text-green-800 rounded-full cursor-pointer hover:bg-green-700 hover:text-white transition">
+            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
               <Settings size={18} />
             </button>
-            <button className="p-1.5 sm:p-2 bg-yellow-400 text-green-800 rounded-full cursor-pointer hover:bg-green-700 hover:text-white transition">
+            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
               <Mail size={18} />
             </button>
           </div>
         </div>
 
-        <h1 className="text-2xl sm:text-3xl font-bold text-green-800 mb-6">
+        {/* Page title */}
+        <h1 className="text-3xl md:text-4xl font-extrabold text-green-800 mb-3">
           Employee Management
         </h1>
 
@@ -427,73 +504,73 @@ export default function EmployeeManagement() {
                 : "translate-x-0 opacity-100 relative"
             }`}
           >
-            <div className="p-4 sm:p-6 bg-white rounded-2xl shadow-md relative">
+            <div className="mt-2 rounded-3xl bg-white shadow-sm border border-yellow-100 px-4 py-4 sm:px-6 sm:py-5 md:px-8 md:py-6 space-y-4">
               {/* Add Employee Button */}
-              <div className="flex justify-end mb-4">
+              <div className="flex justify-end">
                 <button
                   onClick={() => setShowAddForm((v) => !v)}
-                  className="bg-green-700 text-white px-4 py-2 rounded-md cursor-pointer font-semibold hover:bg-yellow-400 hover:text-green-900 transition text-sm"
+                  className="inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
                 >
-                  +
+                  + Add employee
                 </button>
               </div>
 
               {/* Add Employee Form */}
               <div
-                className={`mb-6 overflow-hidden transition-all duration-500 ease-in-out ${
-                  showAddForm ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
+                className={`overflow-hidden transition-all duration-500 ease-in-out ${
+                  showAddForm ? "max-h-[1000px] opacity-100 mt-2" : "max-h-0 opacity-0"
                 }`}
               >
                 {showAddForm && (
-                  <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50 text-green-900">
-                    <h3 className="mb-2 font-semibold text-lg">Add employee</h3>
+                  <div className="p-4 border border-yellow-200 rounded-2xl bg-yellow-50 text-green-900">
+                    <h3 className="mb-3 text-lg font-semibold">Add employee</h3>
                     <form onSubmit={handleAddEmployee}>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md">
-                        <label className="text-sm">
-                          Employee
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+                        <label className="text-sm space-y-1">
+                          <span>Employee</span>
                           <input
                             type="text"
                             name="name"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.name}
                             onChange={handleNewEmployeeChange}
                           />
                         </label>
-                        <label className="text-sm">
-                          Department
+                        <label className="text-sm space-y-1">
+                          <span>Department</span>
                           <input
                             type="text"
                             name="department"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.department}
                             onChange={handleNewEmployeeChange}
                           />
                         </label>
-                        <label className="text-sm">
-                          Position
+                        <label className="text-sm space-y-1">
+                          <span>Position</span>
                           <input
                             type="text"
                             name="position"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.position}
                             onChange={handleNewEmployeeChange}
                           />
                         </label>
-                        <label className="text-sm">
-                          Start Date
+                        <label className="text-sm space-y-1">
+                          <span>Start Date</span>
                           <input
                             type="date"
                             name="startDate"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.startDate}
                             onChange={handleNewEmployeeChange}
                           />
                         </label>
-                        <label className="text-sm">
-                          Category
+                        <label className="text-sm space-y-1">
+                          <span>Category</span>
                           <select
                             name="category"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.category}
                             onChange={handleNewEmployeeChange}
                           >
@@ -504,11 +581,11 @@ export default function EmployeeManagement() {
                             <option value="Contractual">Contractual</option>
                           </select>
                         </label>
-                        <label className="text-sm">
-                          Sex
+                        <label className="text-sm space-y-1">
+                          <span>Sex</span>
                           <select
                             name="gender"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.gender}
                             onChange={handleNewEmployeeChange}
                           >
@@ -518,11 +595,11 @@ export default function EmployeeManagement() {
                             <option value="Other">Other</option>
                           </select>
                         </label>
-                        <label className="text-sm">
-                          Role
+                        <label className="text-sm space-y-1">
+                          <span>Role</span>
                           <select
                             name="role"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.role}
                             onChange={handleNewEmployeeChange}
                           >
@@ -530,35 +607,35 @@ export default function EmployeeManagement() {
                             <option value="admin">Admin</option>
                           </select>
                         </label>
-
-                        <label className="text-sm">
-                          Email
+                        <label className="text-sm space-y-1">
+                          <span>Email</span>
                           <input
                             type="email"
                             name="email"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.email}
                             onChange={handleNewEmployeeChange}
                           />
                         </label>
-                        <label className="text-sm">
-                          Password
+                        <label className="text-sm space-y-1">
+                          <span>Password</span>
                           <input
                             type="password"
                             name="password"
-                            className="w-full rounded border p-2 text-sm"
+                            className="w-full rounded-md border border-yellow-200 p-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
                             value={newEmployee.password}
                             onChange={handleNewEmployeeChange}
                           />
                         </label>
-                        <label>
-                          <button
-                            type="submit"
-                            className="w-full rounded border p-2 mt-6 text-sm bg-green-700 text-white hover:bg-yellow-400 hover:text-green-900 transition"
-                          >
-                            Submit
-                          </button>
-                        </label>
+                      </div>
+
+                      <div className="mt-4 max-w-xs">
+                        <button
+                          type="submit"
+                          className="w-full inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
+                        >
+                          Submit
+                        </button>
                       </div>
 
                       {addEmployeeError && (
@@ -571,52 +648,72 @@ export default function EmployeeManagement() {
                 )}
               </div>
 
-              <h2 className="text-lg font-semibold mb-4 text-green-800">
-                Employee List
-              </h2>
-              {loadingEmployees && (
-                <p className="mb-2 text-sm text-gray-500">Loading employees...</p>
-              )}
-              {employeesError && (
-                <p className="mb-2 text-sm text-red-600">{employeesError}</p>
-              )}
-              <div className="max-h-[500px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-lg">
-                <table className="min-w-full border-collapse text-xs sm:text-sm">
-                  <thead className="sticky top-0 bg-yellow-200 text-green-800 z-10">
-                    <tr>
-                      <th className="p-3 text-left">Employee</th>
-                      <th className="p-3 text-left">Department</th>
-                      <th className="p-3 text-left">Position</th>
-                      <th className="p-3 text-left">Start Date</th>
-                      <th className="p-3 text-left">Category</th>
-                      <th className="p-3 text-left">Gender</th>
-                      <th className="p-3 text-left">Status</th>
-                      <th className="p-3 text-left">Actions</th>
+              <div>
+                <h2 className="text-xl md:text-2xl font-semibold mb-2 text-green-800">
+                  Employee List
+                </h2>
+                {loadingEmployees && (
+                  <p className="mb-2 text-sm text-gray-500">Loading employees...</p>
+                )}
+                {employeesError && (
+                  <p className="mb-2 text-sm text-red-600">{employeesError}</p>
+                )}
+              </div>
+              <div className="max-h-[650px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-2xl">
+                <table className="min-w-[900px] border-collapse text-sm sm:text-base">
+                  <thead className="sticky top-0 bg-yellow-200 text-green-900 z-10">
+                    <tr className="text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                      <th className="p-4 text-left">Employee</th>
+                      <th className="p-4 text-left">Department</th>
+                      <th className="p-4 text-left">Position</th>
+                      <th className="p-4 text-left">Start Date</th>
+                      <th className="p-4 text-left">Category</th>
+                      <th className="p-4 text-left">Gender</th>
+                      <th className="p-4 text-left">Status</th>
+                      <th className="p-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {employeeData.map((emp, idx) => (
                       <tr
-                        key={idx}
-                        className={`${
+                        key={emp.id}
+                        className={`h-14 sm:h-16 ${
                           idx % 2 === 0 ? "bg-yellow-50" : "bg-white"
                         } hover:bg-yellow-100 transition`}
                       >
-                        <td className="p-3">{emp.name}</td>
-                        <td className="p-3">{emp.department}</td>
-                        <td className="p-3">{emp.position}</td>
-                        <td className="p-3">{emp.startDate}</td>
-                        <td className="p-3">{emp.category}</td>
-                        <td className="p-3">{emp.gender}</td>
-                        <td className="p-3">{emp.status}</td>
-                        <td className="p-3">
-                          <ActionDropdown onViewProfile={() => openProfile(emp)} />
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.name}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.department}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.position}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.startDate}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.category}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.gender}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.status}
+                        </td>
+                        <td className="p-4 sm:pr-5">
+                          <ActionDropdown
+                            onViewProfile={() => openProfile(emp)}
+                            onDelete={() => handleDeleteEmployee(emp)}
+                          />
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
             </div>
           </div>
 
