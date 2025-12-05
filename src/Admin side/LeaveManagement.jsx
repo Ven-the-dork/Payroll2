@@ -137,7 +137,9 @@ export default function LeaveManagement() {
               <button className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm">
                 <CalendarDays size={18} /> {isOpen && "Leave Management"}
               </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm">
+              <button 
+                onClick={() => navigate("/payroll")}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm">
                 <CreditCard size={18} /> {isOpen && "Payroll Management"}
               </button>
             </nav>
