@@ -399,7 +399,7 @@ export default function EmployeeManagement() {
                 <CalendarDays size={18} /> {isOpen && "Leave Management"}
               </button>
               <button 
-                onClick={() => navigate("/payroll")}
+                onClick={() => navigate("/PayrollManagement")}
               className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm">
                 <CreditCard size={18} /> {isOpen && "Payroll Management"}
               </button>

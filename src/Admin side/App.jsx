@@ -8,7 +8,7 @@ import LoginPage from "./Loginpage";
 import DashboardUser from "../User-side/DashboardUser";
 import Applyforleave from "../User-side/Applyforleave";
 import ProtectedRoute from "./ProtectedRoute";
-import PayrollManagement from "./payroll";
+import PayrollManagement from "./PayrollManagement";
 function App() {
   return (
     <Router>
@@ -44,7 +44,7 @@ function App() {
           }
         />
         <Route
-          path="/payroll"
+          path="/PayrollManagement"
           element={
             <ProtectedRoute requiredRole="admin">
               <PayrollManagement />

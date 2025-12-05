@@ -9,7 +9,7 @@ export default function DynamicTitle() {
     let title = "Employee Management System";
 
     switch (path) {
-      case "/payroll":
+      case "/PayrollManagement":
         title = "Payroll Management | EMS";
         break;
       case "/applyforleave":
