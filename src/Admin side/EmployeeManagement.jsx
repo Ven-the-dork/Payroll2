@@ -13,7 +13,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { signOut, createUserWithEmailAndPassword } from "firebase/auth";
+import { signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
 
@@ -39,7 +39,6 @@ function ActionDropdown({ onViewProfile, onDelete }) {
       >
         Actions <ChevronDown size={14} />
       </button>
-
       {open && (
         <div className="absolute right-0 mt-2 w-40 rounded-md bg-white shadow-lg border border-yellow-200 z-40 overflow-hidden">
           <button
@@ -69,12 +68,18 @@ function ActionDropdown({ onViewProfile, onDelete }) {
 export default function EmployeeManagement() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
-
   const [profileOpen, setProfileOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addEmployeeError, setAddEmployeeError] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Password confirmation states
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
+  const [passwordError, setPasswordError] = useState("");
+  const [verifyingPassword, setVerifyingPassword] = useState(false);
 
   const sections = [
     "Personal Details",
@@ -111,11 +116,10 @@ export default function EmployeeManagement() {
     const { name, value } = e.target;
     setNewEmployee((prev) => ({ ...prev, [name]: value }));
   };
-  
+
   const [employeeData, setEmployeeData] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [employeesError, setEmployeesError] = useState("");
-
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("full_name");
   const [sortDirection, setSortDirection] = useState("asc");
@@ -141,7 +145,6 @@ export default function EmployeeManagement() {
       }
 
       const { data: latest, error: fetchError } = await query;
-
       console.log("RAW employees from Supabase:", latest);
 
       if (fetchError) {
@@ -150,9 +153,7 @@ export default function EmployeeManagement() {
       } else if (latest) {
         const mapped = latest.map((row) => {
           const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
-          const isRecent =
-            lastSeen && Date.now() - lastSeen.getTime() < 30_000; // 30s
-
+          const isRecent = lastSeen && Date.now() - lastSeen.getTime() < 30000; // 30s
           return {
             id: row.id,
             firebaseUid: row.firebase_uid,
@@ -167,7 +168,6 @@ export default function EmployeeManagement() {
         });
         setEmployeeData(mapped);
       }
-
       setLoadingEmployees(false);
     };
 
@@ -185,7 +185,6 @@ export default function EmployeeManagement() {
     setProfileOpen(false);
     setSelectedEmployee(null);
   };
-  
 
   const sidebarWidth = isOpen ? "lg:w-64" : "lg:w-20";
   const hideWhenCollapsed = !isOpen && "hidden lg:block";
@@ -194,17 +193,8 @@ export default function EmployeeManagement() {
     e.preventDefault();
     setAddEmployeeError("");
 
-    const {
-      name,
-      department,
-      position,
-      startDate,
-      category,
-      gender,
-      email,
-      password,
-      role,
-    } = newEmployee;
+    const { name, department, position, startDate, category, gender, email, password, role } =
+      newEmployee;
 
     if (
       !name.trim() ||
@@ -238,7 +228,7 @@ export default function EmployeeManagement() {
       });
 
       if (error) {
-        console.error("SUPABASE ERROR", error.message, error.details, error.hint);
+        console.error("SUPABASE ERROR:", error.message, error.details, error.hint);
         setAddEmployeeError("Failed to save employee in Supabase.");
         return;
       }
@@ -254,10 +244,9 @@ export default function EmployeeManagement() {
         password: "",
         role: "user",
       });
-
       setShowAddForm(false);
 
-      // Refresh list with same filters/sorting
+      // Refresh list
       let query = supabase
         .from("employees")
         .select(
@@ -274,15 +263,12 @@ export default function EmployeeManagement() {
       }
 
       const { data: latest, error: fetchError } = await query;
-
       console.log("RAW employees after insert:", latest);
 
       if (!fetchError && latest) {
         const mapped = latest.map((row) => {
           const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
-          const isRecent =
-            lastSeen && Date.now() - lastSeen.getTime() < 30_000;
-
+          const isRecent = lastSeen && Date.now() - lastSeen.getTime() < 30000;
           return {
             id: row.id,
             firebaseUid: row.firebase_uid,
@@ -307,30 +293,80 @@ export default function EmployeeManagement() {
     }
   };
 
-  // delete handler
-  const handleDeleteEmployee = async (emp) => {
-    console.log("emp in delete:", emp);
+  // Delete handler - opens password modal
+  const handleDeleteEmployee = (emp) => {
+    setEmployeeToDelete(emp);
+    setShowPasswordModal(true);
+    setPasswordInput("");
+    setPasswordError("");
+  };
 
-    const ok = window.confirm(
-      `Are you sure you want to delete ${emp.name}? This action cannot be undone.`
-    );
-    if (!ok) return;
-
-    const { data, error } = await supabase
-      .from("employees")
-      .delete()
-      .eq("id", emp.id)
-      .select("*");
-
-    console.log("Deleted rows:", data, "Error:", error);
-
-    if (error) {
-      console.error("Error deleting employee:", error.message);
-      alert("Failed to delete employee. Please try again.");
+  // Verify password and delete employee
+  const handleConfirmDelete = async (e) => {
+    e.preventDefault();
+    
+    if (!passwordInput) {
+      setPasswordError("Please enter your password");
       return;
     }
 
-    setEmployeeData((prev) => prev.filter((e) => e.id !== emp.id));
+    if (!currentUser?.email) {
+      setPasswordError("User session not found. Please log in again.");
+      return;
+    }
+
+    setVerifyingPassword(true);
+    setPasswordError("");
+
+    try {
+      // Verify admin password
+      await signInWithEmailAndPassword(auth, currentUser.email, passwordInput);
+      
+      // Password verified - proceed with deletion
+      const { data, error } = await supabase
+        .from("employees")
+        .delete()
+        .eq("id", employeeToDelete.id)
+        .select();
+
+      console.log("Deleted rows:", data, "Error:", error);
+
+      if (error) {
+        console.error("Error deleting employee:", error.message);
+        setPasswordError("Failed to delete employee. Please try again.");
+        setVerifyingPassword(false);
+        return;
+      }
+
+      // Remove from local state
+      setEmployeeData((prev) => prev.filter((e) => e.id !== employeeToDelete.id));
+      
+      // Close modal and reset
+      setShowPasswordModal(false);
+      setEmployeeToDelete(null);
+      setPasswordInput("");
+      alert(`Employee ${employeeToDelete.name} deleted successfully!`);
+      
+    } catch (error) {
+      console.error("Password verification error:", error);
+      if (error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+        setPasswordError("Incorrect password. Please try again.");
+      } else if (error.code === "auth/too-many-requests") {
+        setPasswordError("Too many failed attempts. Please try again later.");
+      } else {
+        setPasswordError("Authentication failed. Please try again.");
+      }
+    } finally {
+      setVerifyingPassword(false);
+    }
+  };
+
+  // Close password modal
+  const handleClosePasswordModal = () => {
+    setShowPasswordModal(false);
+    setEmployeeToDelete(null);
+    setPasswordInput("");
+    setPasswordError("");
   };
 
   // Load current user from sessionStorage
@@ -356,16 +392,12 @@ export default function EmployeeManagement() {
             className={`flex flex-col items-center mb-8 transition-all duration-300 ${hideWhenCollapsed}`}
           >
             <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-yellow-400 flex items-center justify-center shadow-lg">
-              <span className="text-2xl lg:text-3xl font-bold text-green-800">
-                👤
-              </span>
+              <span className="text-2xl lg:text-3xl font-bold text-green-800">👤</span>
             </div>
             <h2 className="mt-3 text-base lg:text-lg text-white font-bold">
               {currentUser?.fullName}
             </h2>
-            <p className="text-yellow-300 text-xs lg:text-sm">
-              {currentUser?.position}
-            </p>
+            <p className="text-yellow-300 text-xs lg:text-sm">{currentUser?.position}</p>
           </div>
 
           <div className="px-4">
@@ -398,9 +430,10 @@ export default function EmployeeManagement() {
               >
                 <CalendarDays size={18} /> {isOpen && "Leave Management"}
               </button>
-              <button 
+              <button
                 onClick={() => navigate("/PayrollManagement")}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm">
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
                 <CreditCard size={18} /> {isOpen && "Payroll Management"}
               </button>
             </nav>
@@ -468,12 +501,10 @@ export default function EmployeeManagement() {
                 Sort by Start Date
               </button>
               <button
-                onClick={() =>
-                  setSortDirection((d) => (d === "asc" ? "desc" : "asc"))
-                }
+                onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
                 className="px-3 py-1.5 rounded-full border border-yellow-300 bg-white text-xs sm:text-sm text-green-800 hover:bg-yellow-100 transition"
               >
-                {sortDirection === "asc" ? "Asc ▲" : "Desc ▼"}
+                {sortDirection === "asc" ? "↑ Asc" : "↓ Desc"}
               </button>
             </div>
           </div>
@@ -497,8 +528,8 @@ export default function EmployeeManagement() {
           Employee Management
         </h1>
 
+        {/* List + Add Employee */}
         <div className="relative">
-          {/* List + Add Employee */}
           <div
             className={`transition-transform duration-500 ${
               profileOpen
@@ -630,7 +661,6 @@ export default function EmployeeManagement() {
                           />
                         </label>
                       </div>
-
                       <div className="mt-4 max-w-xs">
                         <button
                           type="submit"
@@ -639,11 +669,8 @@ export default function EmployeeManagement() {
                           Submit
                         </button>
                       </div>
-
                       {addEmployeeError && (
-                        <p className="mt-2 text-sm text-red-600">
-                          {addEmployeeError}
-                        </p>
+                        <p className="mt-2 text-sm text-red-600">{addEmployeeError}</p>
                       )}
                     </form>
                   </div>
@@ -660,68 +687,182 @@ export default function EmployeeManagement() {
                 {employeesError && (
                   <p className="mb-2 text-sm text-red-600">{employeesError}</p>
                 )}
-              </div>
-              <div className="max-h-[650px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-2xl">
-                <table className="min-w-[900px] border-collapse text-sm sm:text-base">
-                  <thead className="sticky top-0 bg-yellow-200 text-green-900 z-10">
-                    <tr className="text-xs sm:text-sm font-semibold uppercase tracking-wide">
-                      <th className="p-4 text-left">Employee</th>
-                      <th className="p-4 text-left">Department</th>
-                      <th className="p-4 text-left">Position</th>
-                      <th className="p-4 text-left">Start Date</th>
-                      <th className="p-4 text-left">Category</th>
-                      <th className="p-4 text-left">Gender</th>
-                      <th className="p-4 text-left">Status</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employeeData.map((emp, idx) => (
-                      <tr
-                        key={emp.id}
-                        className={`h-14 sm:h-16 ${
-                          idx % 2 === 0 ? "bg-yellow-50" : "bg-white"
-                        } hover:bg-yellow-100 transition`}
-                      >
-                        <td className="p-4 text-sm sm:text-base text-gray-800">
-                          {emp.name}
-                        </td>
-                        <td className="p-4 text-sm sm:text-base text-gray-800">
-                          {emp.department}
-                        </td>
-                        <td className="p-4 text-sm sm:text-base text-gray-800">
-                          {emp.position}
-                        </td>
-                        <td className="p-4 text-sm sm:text-base text-gray-800">
-                          {emp.startDate}
-                        </td>
-                        <td className="p-4 text-sm sm:text-base text-gray-800">
-                          {emp.category}
-                        </td>
-                        <td className="p-4 text-sm sm:text-base text-gray-800">
-                          {emp.gender}
-                        </td>
-                        <td className="p-4 text-sm sm:text-base text-gray-800">
-                          {emp.status}
-                        </td>
-                        <td className="p-4 sm:pr-5">
-                          <ActionDropdown
-                            onViewProfile={() => openProfile(emp)}
-                            onDelete={() => handleDeleteEmployee(emp)}
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
 
+                <div>
+                  <div className="max-h-[650px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-2xl">
+                    <table className="min-w-[900px] border-collapse text-sm sm:text-base">
+                      <thead className="sticky top-0 bg-yellow-200 text-green-900 z-10">
+                        <tr className="text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                          <th className="p-4 text-left">Employee</th>
+                          <th className="p-4 text-left">Department</th>
+                          <th className="p-4 text-left">Position</th>
+                          <th className="p-4 text-left">Start Date</th>
+                          <th className="p-4 text-left">Category</th>
+                          <th className="p-4 text-left">Gender</th>
+                          <th className="p-4 text-left">Status</th>
+                          <th className="p-4 ">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {employeeData.map((emp, idx) => (
+                          <tr
+                            key={emp.id}
+                            className={`h-14 sm:h-16 ${
+                              idx % 2 === 0 ? "bg-yellow-50" : "bg-white"
+                            } hover:bg-yellow-100 transition`}
+                          >
+                            <td className="p-4 text-sm sm:text-base text-gray-800">
+                              {emp.name}
+                            </td>
+                            <td className="p-4 text-sm sm:text-base text-gray-800">
+                              {emp.department}
+                            </td>
+                            <td className="p-4 text-sm sm:text-base text-gray-800">
+                              {emp.position}
+                            </td>
+                            <td className="p-4 text-sm sm:text-base text-gray-800">
+                              {emp.startDate}
+                            </td>
+                            <td className="p-4 text-sm sm:text-base text-gray-800">
+                              {emp.category}
+                            </td>
+                            <td className="p-4 text-sm sm:text-base text-gray-800">
+                              {emp.gender}
+                            </td>
+                            <td className="p-4 text-sm sm:text-base">
+                            <span
+                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
+                                emp.status === "Active"
+                                  ? "bg-green-100 text-green-800 border border-green-300"
+                                  : "bg-red-100 text-red-800 border border-red-300"
+                              }`}
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full ${
+                                  emp.status === "Active" ? "bg-green-500" : "bg-red-500"
+                                }`}
+                              ></span>
+                              {emp.status}
+                            </span>
+                          </td>
+                            <td className="p-4 sm:pl-5">
+                              <ActionDropdown
+                                onViewProfile={() => openProfile(emp)}
+                                onDelete={() => handleDeleteEmployee(emp)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Profile view (unchanged) */}
-          {/* ... keep your existing profile view JSX here ... */}
+          {/* Profile view - keep your existing profile JSX here */}
+          {profileOpen && selectedEmployee && (
+            <div className="transition-transform duration-500 translate-x-0 opacity-100">
+              {/* Your existing profile view code */}
+              <div className="mt-2 rounded-3xl bg-white shadow-sm border border-yellow-100 px-4 py-4 sm:px-6 sm:py-5 md:px-8 md:py-6">
+                <button
+                  onClick={closeProfile}
+                  className="mb-4 inline-flex items-center gap-2 text-green-700 hover:text-yellow-400 font-semibold transition"
+                >
+                  ← Back to List
+                </button>
+                <h2 className="text-2xl font-bold text-green-800 mb-4">
+                  {selectedEmployee.name}'s Profile
+                </h2>
+                {/* Add your profile sections here */}
+                <div className="space-y-4">
+                  <p className="text-gray-700">Department: {selectedEmployee.department}</p>
+                  <p className="text-gray-700">Position: {selectedEmployee.position}</p>
+                  <p className="text-gray-700">Start Date: {selectedEmployee.startDate}</p>
+                  <p className="text-gray-700">Category: {selectedEmployee.category}</p>
+                  <p className="text-gray-700">Gender: {selectedEmployee.gender}</p>
+                  <p className="text-gray-700">Status: {selectedEmployee.status}</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Password Confirmation Modal */}
+        {showPasswordModal && employeeToDelete && (
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md relative border-2 border-red-400">
+              <button
+                className="absolute top-3 right-3 text-red-600 hover:text-red-800 text-2xl font-bold"
+                onClick={handleClosePasswordModal}
+              >
+                &times;
+              </button>
+              
+              <div className="flex items-center mb-4">
+                <span className="text-3xl mr-3">⚠️</span>
+                <h2 className="text-xl font-bold text-red-600">
+                  Confirm Deletion
+                </h2>
+              </div>
+              
+              <p className="text-gray-700 mb-2 text-sm">
+                You are about to delete employee:
+              </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <p className="font-semibold text-green-800">{employeeToDelete.name}</p>
+                <p className="text-sm text-gray-600">{employeeToDelete.position}</p>
+                <p className="text-sm text-gray-600">{employeeToDelete.department}</p>
+              </div>
+              
+              <p className="text-red-600 text-sm mb-4 font-semibold">
+                This action cannot be undone. Please enter your admin password to confirm.
+              </p>
+              
+              <form onSubmit={handleConfirmDelete} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-green-800 mb-2">
+                    Your Password
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                    disabled={verifyingPassword}
+                    autoFocus
+                  />
+                </div>
+                
+                {passwordError && (
+                  <p className="text-sm text-red-600 font-semibold">
+                    {passwordError}
+                  </p>
+                )}
+                
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={verifyingPassword}
+                    className="flex-1 bg-red-600 text-white py-2.5 px-4 rounded-full font-semibold text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {verifyingPassword ? "Verifying..." : "Delete Employee"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClosePasswordModal}
+                    disabled={verifyingPassword}
+                    className="flex-1 border-2 border-gray-300 text-gray-700 py-2.5 px-4 rounded-full font-semibold text-sm hover:bg-gray-50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

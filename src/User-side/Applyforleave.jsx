@@ -1,20 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Bell, User, Settings, LogOut, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
-
-const LEAVE_OPTIONS = [
-  { days: 60, label: "Annual Leave" },
-  { days: 20, label: "Sick Leave" },
-  { days: 60, label: "Maternity Leave" },
-  { days: 30, label: "Compassionate Leave" },
-];
+import { supabase } from "../supabaseClient";
 
 export default function ApplyForLeaveMockup() {
   const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState(null);
+
+  const [leaveOptions, setLeaveOptions] = useState([]);
+  const [loadingLeaves, setLoadingLeaves] = useState(true);
+
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const [leaveHistory, setLeaveHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // User info
+  const [currentUser, setCurrentUser] = useState(null);
+  const [employeeId, setEmployeeId] = useState(null);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -29,11 +38,206 @@ export default function ApplyForLeaveMockup() {
   function openModal(leaveType) {
     setSelectedLeave(leaveType);
     setModalOpen(true);
+    // Reset form
+    setStartDate("");
+    setEndDate("");
+    setReason("");
   }
 
   function closeModal() {
     setModalOpen(false);
     setSelectedLeave(null);
+    setStartDate("");
+    setEndDate("");
+    setReason("");
+  }
+
+  // Load user from session storage and get employee_id
+  useEffect(() => {
+    async function loadUser() {
+      const stored = sessionStorage.getItem("user");
+      if (stored) {
+        try {
+          const user = JSON.parse(stored);
+          setCurrentUser(user);
+
+          // Get employee_id from database
+          const { data, error } = await supabase
+            .from("employees")
+            .select("id")
+            .eq("firebase_uid", user.uid)
+            .single();
+
+          if (!error && data) {
+            setEmployeeId(data.id);
+          }
+        } catch (err) {
+          console.error("Error loading user:", err);
+        }
+      }
+    }
+    loadUser();
+  }, []);
+
+  // Heartbeat: Update status and last_seen every 30 seconds
+  useEffect(() => {
+    if (!employeeId) return;
+
+    const heartbeat = async () => {
+      await supabase
+        .from("employees")
+        .update({
+          status: "Active",
+          last_seen: new Date().toISOString(),
+        })
+        .eq("id", employeeId);
+    };
+
+    // Initial heartbeat
+    heartbeat();
+
+    // Set interval for every 30 seconds
+    const interval = setInterval(heartbeat, 30000);
+
+    // Go offline when user leaves
+    const goOffline = async () => {
+      await supabase
+        .from("employees")
+        .update({ status: "Inactive" })
+        .eq("id", employeeId);
+    };
+
+    window.addEventListener("beforeunload", goOffline);
+
+    // Cleanup
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", goOffline);
+      goOffline();
+    };
+  }, [employeeId]);
+
+  // Fetch leave plans defined by admin
+  useEffect(() => {
+    async function fetchLeaveOptions() {
+      setLoadingLeaves(true);
+      const { data, error } = await supabase
+        .from("leave_plans")
+        .select("id, name, duration_days")
+        .eq("is_active", true)
+        .order("name");
+
+      if (!error && data) {
+        const options = data.map((row) => ({
+          id: row.id,
+          label: row.name,
+          days: row.duration_days,
+        }));
+        setLeaveOptions(options);
+      }
+      setLoadingLeaves(false);
+    }
+
+    fetchLeaveOptions();
+  }, []);
+
+  // Fetch leave history
+  useEffect(() => {
+    async function fetchLeaveHistory() {
+      if (!currentUser?.uid) return;
+      
+      setLoadingHistory(true);
+      const { data, error } = await supabase
+        .from("leave_applications")
+        .select(`
+          *,
+          leave_plans (name)
+        `)
+        .eq("firebase_uid", currentUser.uid)
+        .order("applied_at", { ascending: false });
+
+      if (!error && data) {
+        setLeaveHistory(data);
+      }
+      setLoadingHistory(false);
+    }
+
+    fetchLeaveHistory();
+  }, [currentUser]);
+
+  // Calculate duration in days
+  function calculateDuration(start, end) {
+    if (!start || !end) return 0;
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    const diffTime = Math.abs(endDate - startDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+  }
+
+  // Submit leave application
+  async function handleSubmitApplication(e) {
+    e.preventDefault();
+
+    if (!startDate || !endDate || !reason) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    if (new Date(endDate) < new Date(startDate)) {
+      alert("End date must be after start date");
+      return;
+    }
+
+    if (!currentUser?.uid) {
+      alert("Firebase UID not found in session. Please log in again.");
+      return;
+    }
+
+    if (!employeeId) {
+      alert("Employee ID not found. Please contact administrator.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    const duration = calculateDuration(startDate, endDate);
+
+    const payload = {
+      employee_id: employeeId,
+      firebase_uid: currentUser.uid,
+      leave_plan_id: selectedLeave.id,
+      start_date: startDate,
+      end_date: endDate,
+      duration_days: duration,
+      reason: reason,
+      status: "pending",
+    };
+
+    const { data, error } = await supabase
+      .from("leave_applications")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    setSubmitting(false);
+
+    if (error) {
+      console.error("Error submitting leave application:", error);
+      alert("Failed to submit leave application: " + error.message);
+    } else {
+      alert("Leave application submitted successfully!");
+      closeModal();
+      // Refresh leave history
+      if (currentUser?.uid) {
+        const { data: historyData } = await supabase
+          .from("leave_applications")
+          .select(`*, leave_plans (name)`)
+          .eq("firebase_uid", currentUser.uid)
+          .order("applied_at", { ascending: false });
+        if (historyData) setLeaveHistory(historyData);
+      }
+    }
   }
 
   return (
@@ -73,16 +277,24 @@ export default function ApplyForLeaveMockup() {
 
         {/* Leave Cards */}
         <div className="bg-white rounded p-6 mb-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {LEAVE_OPTIONS.map((opt) => (
-              <LeaveTypeCard
-                key={opt.label}
-                days={opt.days}
-                label={opt.label}
-                onApply={() => openModal(opt)}
-              />
-            ))}
-          </div>
+          {loadingLeaves ? (
+            <p className="text-sm text-green-700">Loading leave plans...</p>
+          ) : leaveOptions.length === 0 ? (
+            <p className="text-sm text-red-600">
+              No leave plans available. Please contact your administrator.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {leaveOptions.map((opt) => (
+                <LeaveTypeCard
+                  key={opt.id}
+                  days={opt.days}
+                  label={opt.label}
+                  onApply={() => openModal(opt)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Leave History */}
@@ -101,83 +313,60 @@ export default function ApplyForLeaveMockup() {
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-yellow-100 text-green-900">
-                  <th className="p-2 font-semibold">Name(s)</th>
-                  <th className="p-2 font-semibold">Duration(s)</th>
-                  <th className="p-2 font-semibold">Start Date</th>
-                  <th className="p-2 font-semibold">End Date</th>
-                  <th className="p-2 font-semibold">Type</th>
-                  <th className="p-2 font-semibold">Reason(s)</th>
-                  <th className="p-2 font-semibold">Actions</th>
+                  <th className="p-2 font-semibold text-left">Leave Type</th>
+                  <th className="p-2 font-semibold text-left">Duration</th>
+                  <th className="p-2 font-semibold text-left">Start Date</th>
+                  <th className="p-2 font-semibold text-left">End Date</th>
+                  <th className="p-2 font-semibold text-left">Status</th>
+                  <th className="p-2 font-semibold text-left">Reason</th>
                 </tr>
               </thead>
               <tbody>
-                {[
-                  {
-                    name: "Abercener Iakobo",
-                    duration: 60,
-                    start: "22/04/2022",
-                    end: "28/04/2022",
-                    type: "Exam",
-                    reason: "Examination",
-                  },
-                  {
-                    name: "Abercener Iakobo",
-                    duration: 130,
-                    start: "22/04/2022",
-                    end: "28/06/2022",
-                    type: "Maternity",
-                    reason: "Child Care",
-                  },
-                  {
-                    name: "Abercener Iakobo",
-                    duration: 5,
-                    start: "22/04/2022",
-                    end: "28/04/2022",
-                    type: "Sick",
-                    reason: "Personal",
-                  },
-                  {
-                    name: "Abercener Iakobo",
-                    duration: 6,
-                    start: "22/04/2022",
-                    end: "28/04/2022",
-                    type: "Sick",
-                    reason: "Personal",
-                  },
-                  {
-                    name: "Abercener Iakobo",
-                    duration: 20,
-                    start: "22/04/2022",
-                    end: "28/06/2022",
-                    type: "Sick",
-                    reason: "Personal",
-                  },
-                  {
-                    name: "Abercener Iakobo",
-                    duration: 5,
-                    start: "22/04/2022",
-                    end: "28/04/2022",
-                    type: "Sick",
-                    reason: "Personal",
-                  },
-                ].map((row, i) => (
-                  <tr
-                    className={i % 2 === 0 ? "bg-green-50" : "bg-yellow-50"}
-                    key={i}
-                  >
-                    <td className="p-2">{row.name}</td>
-                    <td className="p-2">{row.duration}</td>
-                    <td className="p-2">{row.start}</td>
-                    <td className="p-2">{row.end}</td>
-                    <td className="p-2">{row.type}</td>
-                    <td className="p-2">{row.reason}</td>
-                    <td className="p-2">
-                      <button className="bg-yellow-400 text-green-900 rounded w-20 py-1 text-xs font-bold hover:bg-green-700 hover:text-white transition cursor-pointer">
-                        Actions
-                      </button>
+                {loadingHistory ? (
+                  <tr>
+                    <td colSpan="6" className="p-3 text-center text-sm text-gray-600">
+                      Loading...
                     </td>
                   </tr>
-                ))}
+                ) : leaveHistory.length === 0 ? (
+                  <tr className="bg-green-50">
+                    <td colSpan="6" className="p-3 text-center text-sm text-gray-600">
+                      No leave applications yet. Apply for leave above.
+                    </td>
+                  </tr>
+                ) : (
+                  leaveHistory.map((app, index) => (
+                    <tr
+                      key={app.id}
+                      className={index % 2 === 0 ? "bg-green-50" : "bg-white"}
+                    >
+                      <td className="p-2">{app.leave_plans?.name || "N/A"}</td>
+                      <td className="p-2">{app.duration_days} days</td>
+                      <td className="p-2">
+                        {new Date(app.start_date).toLocaleDateString()}
+                      </td>
+                      <td className="p-2">
+                        {new Date(app.end_date).toLocaleDateString()}
+                      </td>
+                      <td className="p-2">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            app.status === "approved"
+                              ? "bg-green-200 text-green-800"
+                              : app.status === "rejected"
+                              ? "bg-red-200 text-red-800"
+                              : app.status === "recalled"
+                              ? "bg-orange-200 text-orange-800"
+                              : "bg-yellow-200 text-yellow-800"
+                          }`}
+                        >
+                          {app.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="p-2">{app.reason}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -185,7 +374,20 @@ export default function ApplyForLeaveMockup() {
       </div>
 
       {/* Modal */}
-      {modalOpen && <Modal onClose={closeModal} leaveType={selectedLeave} />}
+      {modalOpen && (
+        <Modal
+          onClose={closeModal}
+          leaveType={selectedLeave}
+          startDate={startDate}
+          setStartDate={setStartDate}
+          endDate={endDate}
+          setEndDate={setEndDate}
+          reason={reason}
+          setReason={setReason}
+          onSubmit={handleSubmitApplication}
+          submitting={submitting}
+        />
+      )}
     </div>
   );
 }
@@ -205,7 +407,18 @@ function LeaveTypeCard({ days, label, onApply }) {
   );
 }
 
-function Modal({ onClose, leaveType }) {
+function Modal({
+  onClose,
+  leaveType,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  reason,
+  setReason,
+  onSubmit,
+  submitting,
+}) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-blur bg-opacity-40 backdrop-blur-sm">
       <div className="bg-white rounded-xl max-w-lg w-full p-8 relative shadow-lg border-2 border-blue-300 animate-fadeIn">
@@ -225,7 +438,90 @@ function Modal({ onClose, leaveType }) {
             {leaveType?.label?.toLowerCase()}.
           </p>
         </div>
-        {/* rest of the form unchanged */}
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-green-800 mb-1">
+              Leave Type
+            </label>
+            <input
+              type="text"
+              value={leaveType?.label || ""}
+              readOnly
+              className="w-full p-2 bg-gray-100 border border-gray-300 rounded text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-green-800 mb-1">
+              Max Days Available
+            </label>
+            <input
+              type="text"
+              value={leaveType?.days || ""}
+              readOnly
+              className="w-full p-2 bg-gray-100 border border-gray-300 rounded text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-semibold text-green-800 mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+                className="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-green-800 mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                required
+                className="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-green-800 mb-1">
+              Reason for Leave
+            </label>
+            <textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              required
+              placeholder="Enter your reason..."
+              className="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 bg-green-700 text-white py-2 px-4 rounded font-semibold text-sm hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              {submitting ? "Submitting..." : "Submit Application"}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-green-700 text-green-700 py-2 px-4 rounded font-semibold text-sm hover:bg-gray-50 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
