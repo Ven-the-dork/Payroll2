@@ -13,9 +13,14 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
+import {
+  signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
+import { logAudit } from "../utils/auditLog";
 
 function ActionDropdown({ onViewProfile, onDelete }) {
   const [open, setOpen] = useState(false);
@@ -28,16 +33,19 @@ function ActionDropdown({ onViewProfile, onDelete }) {
       }
     }
     document.addEventListener("mousedown", handleDocClick);
-    return () => document.removeEventListener("mousedown", handleDocClick);
+    return () => {
+      document.removeEventListener("mousedown", handleDocClick);
+    };
   }, []);
 
   return (
     <div className="relative inline-block text-left" ref={ref}>
       <button
         onClick={() => setOpen((s) => !s)}
-        className="inline-flex items-center gap-2 rounded-full bg-green-700 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
+        className="inline-flex items-center gap-2 rounded-full bg-green-700 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
       >
-        Actions <ChevronDown size={14} />
+        Actions
+        <ChevronDown size={14} />
       </button>
       {open && (
         <div className="absolute right-0 mt-2 w-40 rounded-md bg-white shadow-lg border border-yellow-200 z-40 overflow-hidden">
@@ -93,7 +101,19 @@ export default function EmployeeManagement() {
   ];
   const [activeSection, setActiveSection] = useState(sections[0]);
 
+  // UPDATED: Logout with audit logging
   const handleLogout = async () => {
+    try {
+      // Log the logout action BEFORE signing out
+      await logAudit({
+        action: "admin_logout",
+        details: `Admin logged out: ${currentUser?.fullName} (${currentUser?.position}, ${currentUser?.department})`,
+        currentUser: currentUser,
+      });
+    } catch (error) {
+      console.error("Error logging logout:", error);
+    }
+
     await signOut(auth);
     sessionStorage.removeItem("user");
     navigate("/", { replace: true });
@@ -120,20 +140,21 @@ export default function EmployeeManagement() {
   const [employeeData, setEmployeeData] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [employeesError, setEmployeesError] = useState("");
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("full_name");
   const [sortDirection, setSortDirection] = useState("asc");
 
+  // Fetch employees excluding admins
   useEffect(() => {
     const fetchEmployees = async () => {
+      console.log("Fetching employees...");
       setLoadingEmployees(true);
       setEmployeesError("");
 
       let query = supabase
         .from("employees")
-        .select(
-          "id, firebase_uid, full_name, department, position, start_date, category, gender, status, last_seen, role"
-        )
+        .select("*")
         .neq("role", "admin")
         .order(sortField, { ascending: sortDirection === "asc" });
 
@@ -144,29 +165,32 @@ export default function EmployeeManagement() {
         );
       }
 
-      const { data: latest, error: fetchError } = await query;
-      console.log("RAW employees from Supabase:", latest);
+      const { data, error } = await query;
 
-      if (fetchError) {
-        console.error("Error loading employees:", fetchError.message);
+      console.log("Response:", { data, error });
+
+      if (error) {
+        console.error("Error:", error);
         setEmployeesError("Failed to load employees. Please try again.");
-      } else if (latest) {
-        const mapped = latest.map((row) => {
-          const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
-          const isRecent = lastSeen && Date.now() - lastSeen.getTime() < 30000; // 30s
-          return {
-            id: row.id,
-            firebaseUid: row.firebase_uid,
-            name: row.full_name,
-            department: row.department,
-            position: row.position,
-            startDate: row.start_date,
-            category: row.category,
-            gender: row.gender,
-            status: isRecent ? "Active" : "Inactive",
-          };
-        });
-        setEmployeeData(mapped);
+      } else {
+        console.log("Success! Got employees:", data);
+        setEmployeeData(
+          data.map((row) => {
+            const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
+            const isRecent = lastSeen && Date.now() - lastSeen.getTime() < 30000;
+            return {
+              id: row.id,
+              firebaseUid: row.firebase_uid,
+              name: row.full_name || "Unknown",
+              department: row.department || "N/A",
+              position: row.position || "N/A",
+              startDate: row.start_date || "N/A",
+              category: row.category || "N/A",
+              gender: row.gender || "N/A",
+              status: isRecent ? "Active" : "Inactive",
+            };
+          })
+        );
       }
       setLoadingEmployees(false);
     };
@@ -233,6 +257,13 @@ export default function EmployeeManagement() {
         return;
       }
 
+      // Log employee creation
+      await logAudit({
+        action: "created_employee",
+        details: `Created new employee: ${name} (${position}, ${department})`,
+        currentUser: currentUser,
+      });
+
       setNewEmployee({
         name: "",
         department: "",
@@ -249,9 +280,7 @@ export default function EmployeeManagement() {
       // Refresh list
       let query = supabase
         .from("employees")
-        .select(
-          "id, firebase_uid, full_name, department, position, start_date, category, gender, status, last_seen, role"
-        )
+        .select("*")
         .neq("role", "admin")
         .order(sortField, { ascending: sortDirection === "asc" });
 
@@ -263,7 +292,6 @@ export default function EmployeeManagement() {
       }
 
       const { data: latest, error: fetchError } = await query;
-      console.log("RAW employees after insert:", latest);
 
       if (!fetchError && latest) {
         const mapped = latest.map((row) => {
@@ -304,7 +332,7 @@ export default function EmployeeManagement() {
   // Verify password and delete employee
   const handleConfirmDelete = async (e) => {
     e.preventDefault();
-    
+
     if (!passwordInput) {
       setPasswordError("Please enter your password");
       return;
@@ -321,7 +349,7 @@ export default function EmployeeManagement() {
     try {
       // Verify admin password
       await signInWithEmailAndPassword(auth, currentUser.email, passwordInput);
-      
+
       // Password verified - proceed with deletion
       const { data, error } = await supabase
         .from("employees")
@@ -329,10 +357,8 @@ export default function EmployeeManagement() {
         .eq("id", employeeToDelete.id)
         .select();
 
-      console.log("Deleted rows:", data, "Error:", error);
-
       if (error) {
-        console.error("Error deleting employee:", error.message);
+        console.error("Error deleting employee", error.message);
         setPasswordError("Failed to delete employee. Please try again.");
         setVerifyingPassword(false);
         return;
@@ -340,16 +366,26 @@ export default function EmployeeManagement() {
 
       // Remove from local state
       setEmployeeData((prev) => prev.filter((e) => e.id !== employeeToDelete.id));
-      
+
+      // Log the deletion
+      await logAudit({
+        action: "deleted_employee",
+        details: `Deleted employee: ${employeeToDelete.name} (${employeeToDelete.position}, ${employeeToDelete.department})`,
+        currentUser: currentUser,
+      });
+
       // Close modal and reset
       setShowPasswordModal(false);
       setEmployeeToDelete(null);
       setPasswordInput("");
       alert(`Employee ${employeeToDelete.name} deleted successfully!`);
-      
     } catch (error) {
       console.error("Password verification error:", error);
-      if (error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+
+      if (
+        error.code === "auth/wrong-password" ||
+        error.code === "auth/invalid-credential"
+      ) {
         setPasswordError("Incorrect password. Please try again.");
       } else if (error.code === "auth/too-many-requests") {
         setPasswordError("Too many failed attempts. Please try again later.");
@@ -401,9 +437,7 @@ export default function EmployeeManagement() {
           </div>
 
           <div className="px-4">
-            <h3
-              className={`text-yellow-300 text-xs uppercase mb-2 ${hideWhenCollapsed}`}
-            >
+            <h3 className={`text-yellow-300 text-xs uppercase mb-2 ${hideWhenCollapsed}`}>
               Features
             </h3>
             <nav className="space-y-1">
@@ -411,7 +445,8 @@ export default function EmployeeManagement() {
                 onClick={() => navigate("/dashboard")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
-                <LayoutDashboard size={18} /> {isOpen && "Dashboard"}
+                <LayoutDashboard size={18} />
+                {isOpen && "Dashboard"}
               </button>
             </nav>
 
@@ -422,19 +457,22 @@ export default function EmployeeManagement() {
             </h3>
             <nav className="space-y-1">
               <button className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm">
-                <Users size={18} /> {isOpen && "Employee Management"}
+                <Users size={18} />
+                {isOpen && "Employee Management"}
               </button>
               <button
                 onClick={() => navigate("/leave-management")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
-                <CalendarDays size={18} /> {isOpen && "Leave Management"}
+                <CalendarDays size={18} />
+                {isOpen && "Leave Management"}
               </button>
               <button
                 onClick={() => navigate("/PayrollManagement")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
-                <CreditCard size={18} /> {isOpen && "Payroll Management"}
+                <CreditCard size={18} />
+                {isOpen && "Payroll Management"}
               </button>
             </nav>
           </div>
@@ -443,7 +481,7 @@ export default function EmployeeManagement() {
         <div className="px-4 lg:px-6 mt-4 lg:mt-0">
           <button
             onClick={handleLogout}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
           >
             <Power size={18} />
             {isOpen && "Log Out"}
@@ -451,7 +489,7 @@ export default function EmployeeManagement() {
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content - Rest of the component remains the same */}
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
         {/* Top bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
@@ -462,8 +500,8 @@ export default function EmployeeManagement() {
             <Menu size={28} />
           </button>
 
+          {/* Search */}
           <div className="flex-1 flex flex-col items-center md:items-center">
-            {/* Search */}
             <div className="w-full md:max-w-xl relative mb-2">
               <input
                 type="text"
@@ -528,7 +566,7 @@ export default function EmployeeManagement() {
           Employee Management
         </h1>
 
-        {/* List + Add Employee */}
+        {/* List / Add Employee */}
         <div className="relative">
           <div
             className={`transition-transform duration-500 ${
@@ -542,7 +580,7 @@ export default function EmployeeManagement() {
               <div className="flex justify-end">
                 <button
                   onClick={() => setShowAddForm((v) => !v)}
-                  className="inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
+                  className="inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
                 >
                   + Add employee
                 </button>
@@ -664,7 +702,7 @@ export default function EmployeeManagement() {
                       <div className="mt-4 max-w-xs">
                         <button
                           type="submit"
-                          className="w-full inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
+                          className="w-full inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
                         >
                           Submit
                         </button>
@@ -677,94 +715,90 @@ export default function EmployeeManagement() {
                 )}
               </div>
 
-              <div>
-                <h2 className="text-xl md:text-2xl font-semibold mb-2 text-green-800">
-                  Employee List
-                </h2>
-                {loadingEmployees && (
-                  <p className="mb-2 text-sm text-gray-500">Loading employees...</p>
-                )}
-                {employeesError && (
-                  <p className="mb-2 text-sm text-red-600">{employeesError}</p>
-                )}
+              <h2 className="text-xl md:text-2xl font-semibold mb-2 text-green-800">
+                Employee List
+              </h2>
 
-                <div>
-                  <div className="max-h-[650px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-2xl">
-                    <table className="min-w-[900px] border-collapse text-sm sm:text-base">
-                      <thead className="sticky top-0 bg-yellow-200 text-green-900 z-10">
-                        <tr className="text-xs sm:text-sm font-semibold uppercase tracking-wide">
-                          <th className="p-4 text-left">Employee</th>
-                          <th className="p-4 text-left">Department</th>
-                          <th className="p-4 text-left">Position</th>
-                          <th className="p-4 text-left">Start Date</th>
-                          <th className="p-4 text-left">Category</th>
-                          <th className="p-4 text-left">Gender</th>
-                          <th className="p-4 text-left">Status</th>
-                          <th className="p-4 ">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {employeeData.map((emp, idx) => (
-                          <tr
-                            key={emp.id}
-                            className={`h-14 sm:h-16 ${
-                              idx % 2 === 0 ? "bg-yellow-50" : "bg-white"
-                            } hover:bg-yellow-100 transition`}
+              {loadingEmployees && (
+                <p className="mb-2 text-sm text-gray-500">Loading employees...</p>
+              )}
+              {employeesError && (
+                <p className="mb-2 text-sm text-red-600">{employeesError}</p>
+              )}
+
+              <div className="max-h-[650px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-2xl">
+                <table className="min-w-[900px] border-collapse text-sm sm:text-base">
+                  <thead className="sticky top-0 bg-yellow-200 text-green-900 z-10">
+                    <tr className="text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                      <th className="p-4 text-left">Employee</th>
+                      <th className="p-4 text-left">Department</th>
+                      <th className="p-4 text-left">Position</th>
+                      <th className="p-4 text-left">Start Date</th>
+                      <th className="p-4 text-left">Category</th>
+                      <th className="p-4 text-left">Gender</th>
+                      <th className="p-4 text-left">Status</th>
+                      <th className="p-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {employeeData.map((emp, idx) => (
+                      <tr
+                        key={emp.id}
+                        className={`h-14 sm:h-16 ${
+                          idx % 2 === 0 ? "bg-yellow-50" : "bg-white"
+                        } hover:bg-yellow-100 transition`}
+                      >
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.name}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.department}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.position}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.startDate}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.category}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base text-gray-800">
+                          {emp.gender}
+                        </td>
+                        <td className="p-4 text-sm sm:text-base">
+                          <span
+                            className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
+                              emp.status === "Active"
+                                ? "bg-green-100 text-green-800 border border-green-300"
+                                : "bg-red-100 text-red-800 border border-red-300"
+                            }`}
                           >
-                            <td className="p-4 text-sm sm:text-base text-gray-800">
-                              {emp.name}
-                            </td>
-                            <td className="p-4 text-sm sm:text-base text-gray-800">
-                              {emp.department}
-                            </td>
-                            <td className="p-4 text-sm sm:text-base text-gray-800">
-                              {emp.position}
-                            </td>
-                            <td className="p-4 text-sm sm:text-base text-gray-800">
-                              {emp.startDate}
-                            </td>
-                            <td className="p-4 text-sm sm:text-base text-gray-800">
-                              {emp.category}
-                            </td>
-                            <td className="p-4 text-sm sm:text-base text-gray-800">
-                              {emp.gender}
-                            </td>
-                            <td className="p-4 text-sm sm:text-base">
                             <span
-                              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${
-                                emp.status === "Active"
-                                  ? "bg-green-100 text-green-800 border border-green-300"
-                                  : "bg-red-100 text-red-800 border border-red-300"
+                              className={`w-2 h-2 rounded-full ${
+                                emp.status === "Active" ? "bg-green-500" : "bg-red-500"
                               }`}
-                            >
-                              <span
-                                className={`w-2 h-2 rounded-full ${
-                                  emp.status === "Active" ? "bg-green-500" : "bg-red-500"
-                                }`}
-                              ></span>
-                              {emp.status}
-                            </span>
-                          </td>
-                            <td className="p-4 sm:pl-5">
-                              <ActionDropdown
-                                onViewProfile={() => openProfile(emp)}
-                                onDelete={() => handleDeleteEmployee(emp)}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                            ></span>
+                            {emp.status}
+                          </span>
+                        </td>
+                        <td className="p-4 sm:pl-5">
+                          <ActionDropdown
+                            onViewProfile={() => openProfile(emp)}
+                            onDelete={() => handleDeleteEmployee(emp)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
 
-          {/* Profile view - keep your existing profile JSX here */}
+          {/* Profile view */}
           {profileOpen && selectedEmployee && (
             <div className="transition-transform duration-500 translate-x-0 opacity-100">
-              {/* Your existing profile view code */}
               <div className="mt-2 rounded-3xl bg-white shadow-sm border border-yellow-100 px-4 py-4 sm:px-6 sm:py-5 md:px-8 md:py-6">
                 <button
                   onClick={closeProfile}
@@ -775,14 +809,26 @@ export default function EmployeeManagement() {
                 <h2 className="text-2xl font-bold text-green-800 mb-4">
                   {selectedEmployee.name}'s Profile
                 </h2>
-                {/* Add your profile sections here */}
+
                 <div className="space-y-4">
-                  <p className="text-gray-700">Department: {selectedEmployee.department}</p>
-                  <p className="text-gray-700">Position: {selectedEmployee.position}</p>
-                  <p className="text-gray-700">Start Date: {selectedEmployee.startDate}</p>
-                  <p className="text-gray-700">Category: {selectedEmployee.category}</p>
-                  <p className="text-gray-700">Gender: {selectedEmployee.gender}</p>
-                  <p className="text-gray-700">Status: {selectedEmployee.status}</p>
+                  <p className="text-gray-700">
+                    <strong>Department:</strong> {selectedEmployee.department}
+                  </p>
+                  <p className="text-gray-700">
+                    <strong>Position:</strong> {selectedEmployee.position}
+                  </p>
+                  <p className="text-gray-700">
+                    <strong>Start Date:</strong> {selectedEmployee.startDate}
+                  </p>
+                  <p className="text-gray-700">
+                    <strong>Category:</strong> {selectedEmployee.category}
+                  </p>
+                  <p className="text-gray-700">
+                    <strong>Gender:</strong> {selectedEmployee.gender}
+                  </p>
+                  <p className="text-gray-700">
+                    <strong>Status:</strong> {selectedEmployee.status}
+                  </p>
                 </div>
               </div>
             </div>
@@ -797,29 +843,29 @@ export default function EmployeeManagement() {
                 className="absolute top-3 right-3 text-red-600 hover:text-red-800 text-2xl font-bold"
                 onClick={handleClosePasswordModal}
               >
-                &times;
+                ×
               </button>
-              
+
               <div className="flex items-center mb-4">
                 <span className="text-3xl mr-3">⚠️</span>
-                <h2 className="text-xl font-bold text-red-600">
-                  Confirm Deletion
-                </h2>
+                <h2 className="text-xl font-bold text-red-600">Confirm Deletion</h2>
               </div>
-              
+
               <p className="text-gray-700 mb-2 text-sm">
                 You are about to delete employee:
               </p>
+
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
                 <p className="font-semibold text-green-800">{employeeToDelete.name}</p>
                 <p className="text-sm text-gray-600">{employeeToDelete.position}</p>
                 <p className="text-sm text-gray-600">{employeeToDelete.department}</p>
               </div>
-              
+
               <p className="text-red-600 text-sm mb-4 font-semibold">
-                This action cannot be undone. Please enter your admin password to confirm.
+                This action cannot be undone. Please enter your admin password to
+                confirm.
               </p>
-              
+
               <form onSubmit={handleConfirmDelete} className="space-y-4">
                 <div>
                   <label className="block text-sm font-semibold text-green-800 mb-2">
@@ -835,13 +881,11 @@ export default function EmployeeManagement() {
                     autoFocus
                   />
                 </div>
-                
+
                 {passwordError && (
-                  <p className="text-sm text-red-600 font-semibold">
-                    {passwordError}
-                  </p>
+                  <p className="text-sm text-red-600 font-semibold">{passwordError}</p>
                 )}
-                
+
                 <div className="flex gap-3 pt-2">
                   <button
                     type="submit"
