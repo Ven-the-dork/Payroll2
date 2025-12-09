@@ -11,6 +11,7 @@ import {
   Bell,
   Settings,
   ChevronDown,
+   FileText,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -456,7 +457,10 @@ export default function EmployeeManagement() {
               Organization
             </h3>
             <nav className="space-y-1">
-              <button className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm">
+              <button
+                onClick={() => navigate("/employee-management")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
+              >
                 <Users size={18} />
                 {isOpen && "Employee Management"}
               </button>
@@ -468,13 +472,21 @@ export default function EmployeeManagement() {
                 {isOpen && "Leave Management"}
               </button>
               <button
-                onClick={() => navigate("/PayrollManagement")}
+                  onClick={() => navigate("/PayrollManagement")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
                 <CreditCard size={18} />
                 {isOpen && "Payroll Management"}
               </button>
+              <button
+                onClick={() => navigate("/audit-logs")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <FileText size={18} />
+                {isOpen && "Audit Logs"}
+              </button>
             </nav>
+
           </div>
         </div>
 

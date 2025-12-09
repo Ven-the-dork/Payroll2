@@ -11,7 +11,9 @@ import {
   Bell,
   Settings,
   ChevronDown,
+  FileText,  // ← ADD THIS LINE
 } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
@@ -426,27 +428,42 @@ export default function LeaveManagement() {
               </button>
             </nav>
 
-            <h3
-              className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
-            >
-              Organization
-            </h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => navigate("/employee-management")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <Users size={18} /> {isOpen && "Employee Management"}
-              </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm">
-                <CalendarDays size={18} /> {isOpen && "Leave Management"}
-              </button>
-              <button 
-                onClick={() => navigate("/PayrollManagement")}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm">
-                <CreditCard size={18} /> {isOpen && "Payroll Management"}
-              </button>
-            </nav>
+<h3
+  className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
+>
+  Organization
+</h3>
+<nav className="space-y-1">
+  <button
+    onClick={() => navigate("/employee-management")}
+    className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+  >
+    <Users size={18} />
+    {isOpen && "Employee Management"}
+  </button>
+  <button
+    className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
+  >
+    <CalendarDays size={18} />
+    {isOpen && "Leave Management"}
+  </button>
+  <button
+    onClick={() => navigate("/PayrollManagement")}
+    className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+  >
+    <CreditCard size={18} />
+    {isOpen && "Payroll Management"}
+  </button>
+  {/* NEW: Audit Logs Button */}
+  <button
+    onClick={() => navigate("/audit-logs")}
+    className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+  >
+    <FileText size={18} />
+    {isOpen && "Audit Logs"}
+  </button>
+</nav>
+
           </div>
         </div>
 

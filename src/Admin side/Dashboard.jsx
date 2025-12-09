@@ -14,6 +14,7 @@ import {
   Search,
   Bell,
   Settings,
+  FileText,
 } from "lucide-react";
 
 export default function Dashboard() {
@@ -136,6 +137,13 @@ export default function Dashboard() {
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
                 <CreditCard size={18} /> {isOpen && "Payroll Management"}
+              </button>
+              {/* NEW: Audit Logs Button */}
+              <button
+                onClick={() => navigate("/audit-logs")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <FileText size={18} /> {isOpen && "Audit Logs"}
               </button>
             </nav>
           </div>

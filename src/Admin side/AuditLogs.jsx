@@ -60,17 +60,17 @@ export default function AuditLogs() {
       let query = supabase
         .from("audit_logs")
         .select("*")
-        .order("created_at", { ascending: sortDirection === "asc" });
+        .order("timestamp", { ascending: sortDirection === "asc" }); // Changed from created_at to timestamp
 
       // Filter by action type
       if (filterAction !== "all") {
         query = query.eq("action", filterAction);
       }
 
-      // Search by admin name or details
+      // Search by user name or details
       if (searchTerm.trim()) {
         query = query.or(
-          `performed_by.ilike.%${searchTerm}%,details.ilike.%${searchTerm}%`
+          `user_name.ilike.%${searchTerm}%,details.ilike.%${searchTerm}%`
         );
       }
 
@@ -120,9 +120,9 @@ export default function AuditLogs() {
   const exportToCSV = () => {
     const headers = ["Timestamp", "Action", "Performed By", "Details"];
     const rows = auditLogs.map(log => [
-      formatDate(log.created_at),
+      formatDate(log.timestamp), // Changed from created_at to timestamp
       log.action,
-      log.performed_by || "System",
+      log.user_name || "System", // Changed from performed_by to user_name
       log.details
     ]);
 
@@ -143,7 +143,7 @@ export default function AuditLogs() {
     <div className="min-h-screen flex flex-col lg:flex-row bg-white">
       {/* Sidebar */}
       <aside
-        className={`w-full lg:flex-shrink-0 ${sidebarWidth} max-w-full bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-4 lg:py-6 transition-all duration-300 relative`}
+        className={`w-full lg:flex-shrink-0 ${sidebarWidth} max-w-full bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-4 lg:py-6 transition-all duration-300`}
       >
         <div>
           <div
@@ -209,7 +209,7 @@ export default function AuditLogs() {
           </div>
         </div>
 
-        <div className="px-4 lg:px-6 mt-4 lg:mt-0">
+        <div className="px-4 lg:px-6 mt-6 mb-10">
           <button
             onClick={handleLogout}
             className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
@@ -339,7 +339,7 @@ export default function AuditLogs() {
                           } hover:bg-yellow-100 transition`}
                         >
                           <td className="p-4 text-sm text-gray-600">
-                            {formatDate(log.created_at)}
+                            {formatDate(log.timestamp)}
                           </td>
                           <td className="p-4">
                             <span
@@ -349,7 +349,7 @@ export default function AuditLogs() {
                             </span>
                           </td>
                           <td className="p-4 text-sm text-gray-800 font-medium">
-                            {log.performed_by || "System"}
+                            {log.user_name || "System"}
                           </td>
                           <td className="p-4 text-sm text-gray-600">
                             {log.details}

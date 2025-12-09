@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -10,7 +10,9 @@ import {
   Bell,
   Settings,
   Download,
+  FileText,
 } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
@@ -77,6 +79,7 @@ export default function PayrollManagement() {
   const [isOpen, setIsOpen] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState("December 2024");
   const [selectedIds, setSelectedIds] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const sidebarWidth = isOpen ? "lg:w-64" : "lg:w-20";
   const hideWhenCollapsed = !isOpen && "hidden lg:block";
@@ -86,6 +89,18 @@ export default function PayrollManagement() {
     sessionStorage.removeItem("user");
     navigate("/", { replace: true });
   };
+
+  // Load current user from sessionStorage
+  useEffect(() => {
+    const stored = sessionStorage.getItem("user");
+    if (stored) {
+      try {
+        setCurrentUser(JSON.parse(stored));
+      } catch {
+        setCurrentUser(null);
+      }
+    }
+  }, []);
 
   const toggleRow = (id) => {
     setSelectedIds((prev) =>
@@ -122,9 +137,11 @@ export default function PayrollManagement() {
               </span>
             </div>
             <h2 className="mt-3 text-base lg:text-lg text-white font-bold">
-              Name
+              {currentUser?.fullName}
             </h2>
-            <p className="text-yellow-300 text-xs lg:text-sm">Position</p>
+            <p className="text-yellow-300 text-xs lg:text-sm">
+              {currentUser?.position}
+            </p>
           </div>
 
           {/* Nav */}
@@ -153,23 +170,36 @@ export default function PayrollManagement() {
                 onClick={() => navigate("/employee-management")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
-                <Users size={18} /> {isOpen && "Employee Management"}
+                <Users size={18} />
+                {isOpen && "Employee Management"}
               </button>
               <button
                 onClick={() => navigate("/leave-management")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
-                <CalendarDays size={18} /> {isOpen && "Leave Management"}
+                <CalendarDays size={18} />
+                {isOpen && "Leave Management"}
               </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm">
-                <CreditCard size={18} /> {isOpen && "Payroll Management"}
+              <button
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
+              >
+                <CreditCard size={18} />
+                {isOpen && "Payroll Management"}
+              </button>
+              {/* Audit Logs Button */}
+              <button
+                onClick={() => navigate("/audit-logs")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <FileText size={18} />
+                {isOpen && "Audit Logs"}
               </button>
             </nav>
           </div>
         </div>
 
         {/* Logout */}
-        <div className="px-4 lg:px-6 mt-4 lg:mt-0">
+        <div className="px-4 lg:px-6 mt-6 mb-1">
           <button
             onClick={handleLogout}
             className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
