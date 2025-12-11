@@ -15,6 +15,7 @@ import Applyforleave from "../User-side/Applyforleave";
 import ProtectedRoute from "./ProtectedRoute";
 import PayrollManagement from "./PayrollManagement";
 
+
 function App() {
   return (
     <Router>
@@ -81,6 +82,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+        
       </Routes>
     </Router>
   );
