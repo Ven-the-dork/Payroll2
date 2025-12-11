@@ -11,7 +11,7 @@ import {
   Bell,
   Settings,
   ChevronDown,
-   FileText,
+  FileText,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -22,6 +22,8 @@ import {
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
 import { logAudit } from "../utils/auditLog";
+
+/* ---------- Action dropdown ---------- */
 
 function ActionDropdown({ onViewProfile, onDelete }) {
   const [open, setOpen] = useState(false);
@@ -43,7 +45,7 @@ function ActionDropdown({ onViewProfile, onDelete }) {
     <div className="relative inline-block text-left" ref={ref}>
       <button
         onClick={() => setOpen((s) => !s)}
-        className="inline-flex items-center gap-2 rounded-full bg-green-700 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
+        className="inline-flex items-center gap-2 rounded-full bg-green-700 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-sm cursor-pointer hover:bg-green-800 active:scale-95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
       >
         Actions
         <ChevronDown size={14} />
@@ -74,6 +76,8 @@ function ActionDropdown({ onViewProfile, onDelete }) {
   );
 }
 
+/* ---------- Main component ---------- */
+
 export default function EmployeeManagement() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
@@ -102,10 +106,8 @@ export default function EmployeeManagement() {
   ];
   const [activeSection, setActiveSection] = useState(sections[0]);
 
-  // UPDATED: Logout with audit logging
   const handleLogout = async () => {
     try {
-      // Log the logout action BEFORE signing out
       await logAudit({
         action: "admin_logout",
         details: `Admin logged out: ${currentUser?.fullName} (${currentUser?.position}, ${currentUser?.department})`,
@@ -149,7 +151,6 @@ export default function EmployeeManagement() {
   // Fetch employees excluding admins
   useEffect(() => {
     const fetchEmployees = async () => {
-      console.log("Fetching employees...");
       setLoadingEmployees(true);
       setEmployeesError("");
 
@@ -168,27 +169,29 @@ export default function EmployeeManagement() {
 
       const { data, error } = await query;
 
-      console.log("Response:", { data, error });
-
       if (error) {
         console.error("Error:", error);
         setEmployeesError("Failed to load employees. Please try again.");
       } else {
-        console.log("Success! Got employees:", data);
         setEmployeeData(
           data.map((row) => {
             const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
-            const isRecent = lastSeen && Date.now() - lastSeen.getTime() < 30000;
+            const isRecent =
+              lastSeen && Date.now() - lastSeen.getTime() < 30000;
             return {
               id: row.id,
               firebaseUid: row.firebase_uid,
               name: row.full_name || "Unknown",
+              email: row.email || "",
               department: row.department || "N/A",
               position: row.position || "N/A",
               startDate: row.start_date || "N/A",
               category: row.category || "N/A",
               gender: row.gender || "N/A",
               status: isRecent ? "Active" : "Inactive",
+              contact: row.contact || "",
+              address: row.address || "",
+              profile_image_url: row.profile_image_url || "",
             };
           })
         );
@@ -218,8 +221,17 @@ export default function EmployeeManagement() {
     e.preventDefault();
     setAddEmployeeError("");
 
-    const { name, department, position, startDate, category, gender, email, password, role } =
-      newEmployee;
+    const {
+      name,
+      department,
+      position,
+      startDate,
+      category,
+      gender,
+      email,
+      password,
+      role,
+    } = newEmployee;
 
     if (
       !name.trim() ||
@@ -258,7 +270,6 @@ export default function EmployeeManagement() {
         return;
       }
 
-      // Log employee creation
       await logAudit({
         action: "created_employee",
         details: `Created new employee: ${name} (${position}, ${department})`,
@@ -278,7 +289,6 @@ export default function EmployeeManagement() {
       });
       setShowAddForm(false);
 
-      // Refresh list
       let query = supabase
         .from("employees")
         .select("*")
@@ -297,17 +307,22 @@ export default function EmployeeManagement() {
       if (!fetchError && latest) {
         const mapped = latest.map((row) => {
           const lastSeen = row.last_seen ? new Date(row.last_seen) : null;
-          const isRecent = lastSeen && Date.now() - lastSeen.getTime() < 30000;
+          const isRecent =
+            lastSeen && Date.now() - lastSeen.getTime() < 30000;
           return {
             id: row.id,
             firebaseUid: row.firebase_uid,
             name: row.full_name,
+            email: row.email || "",
             department: row.department,
             position: row.position,
             startDate: row.start_date,
             category: row.category,
             gender: row.gender,
             status: isRecent ? "Active" : "Inactive",
+            contact: row.contact || "",
+            address: row.address || "",
+            profile_image_url: row.profile_image_url || "",
           };
         });
         setEmployeeData(mapped);
@@ -348,15 +363,12 @@ export default function EmployeeManagement() {
     setPasswordError("");
 
     try {
-      // Verify admin password
       await signInWithEmailAndPassword(auth, currentUser.email, passwordInput);
 
-      // Password verified - proceed with deletion
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("employees")
         .delete()
-        .eq("id", employeeToDelete.id)
-        .select();
+        .eq("id", employeeToDelete.id);
 
       if (error) {
         console.error("Error deleting employee", error.message);
@@ -365,17 +377,16 @@ export default function EmployeeManagement() {
         return;
       }
 
-      // Remove from local state
-      setEmployeeData((prev) => prev.filter((e) => e.id !== employeeToDelete.id));
+      setEmployeeData((prev) =>
+        prev.filter((e) => e.id !== employeeToDelete.id)
+      );
 
-      // Log the deletion
       await logAudit({
         action: "deleted_employee",
         details: `Deleted employee: ${employeeToDelete.name} (${employeeToDelete.position}, ${employeeToDelete.department})`,
         currentUser: currentUser,
       });
 
-      // Close modal and reset
       setShowPasswordModal(false);
       setEmployeeToDelete(null);
       setPasswordInput("");
@@ -398,7 +409,6 @@ export default function EmployeeManagement() {
     }
   };
 
-  // Close password modal
   const handleClosePasswordModal = () => {
     setShowPasswordModal(false);
     setEmployeeToDelete(null);
@@ -429,12 +439,16 @@ export default function EmployeeManagement() {
             className={`flex flex-col items-center mb-8 transition-all duration-300 ${hideWhenCollapsed}`}
           >
             <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-yellow-400 flex items-center justify-center shadow-lg">
-              <span className="text-2xl lg:text-3xl font-bold text-green-800">👤</span>
+              <span className="text-2xl lg:text-3xl font-bold text-green-800">
+                👤
+              </span>
             </div>
             <h2 className="mt-3 text-base lg:text-lg text-white font-bold">
               {currentUser?.fullName}
             </h2>
-            <p className="text-yellow-300 text-xs lg:text-sm">{currentUser?.position}</p>
+            <p className="text-yellow-300 text-xs lg:text-sm">
+              {currentUser?.position}
+            </p>
           </div>
 
           <div className="px-4">
@@ -472,7 +486,7 @@ export default function EmployeeManagement() {
                 {isOpen && "Leave Management"}
               </button>
               <button
-                  onClick={() => navigate("/PayrollManagement")}
+                onClick={() => navigate("/PayrollManagement")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
               >
                 <CreditCard size={18} />
@@ -486,7 +500,6 @@ export default function EmployeeManagement() {
                 {isOpen && "Audit Logs"}
               </button>
             </nav>
-
           </div>
         </div>
 
@@ -501,7 +514,7 @@ export default function EmployeeManagement() {
         </div>
       </aside>
 
-      {/* Main Content - Rest of the component remains the same */}
+      {/* Main Content */}
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
         {/* Top bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
@@ -551,7 +564,9 @@ export default function EmployeeManagement() {
                 Sort by Start Date
               </button>
               <button
-                onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+                onClick={() =>
+                  setSortDirection((d) => (d === "asc" ? "desc" : "asc"))
+                }
                 className="px-3 py-1.5 rounded-full border border-yellow-300 bg-white text-xs sm:text-sm text-green-800 hover:bg-yellow-100 transition"
               >
                 {sortDirection === "asc" ? "↑ Asc" : "↓ Desc"}
@@ -720,7 +735,9 @@ export default function EmployeeManagement() {
                         </button>
                       </div>
                       {addEmployeeError && (
-                        <p className="mt-2 text-sm text-red-600">{addEmployeeError}</p>
+                        <p className="mt-2 text-sm text-red-600">
+                          {addEmployeeError}
+                        </p>
                       )}
                     </form>
                   </div>
@@ -788,7 +805,9 @@ export default function EmployeeManagement() {
                           >
                             <span
                               className={`w-2 h-2 rounded-full ${
-                                emp.status === "Active" ? "bg-green-500" : "bg-red-500"
+                                emp.status === "Active"
+                                  ? "bg-green-500"
+                                  : "bg-red-500"
                               }`}
                             ></span>
                             {emp.status}
@@ -808,42 +827,12 @@ export default function EmployeeManagement() {
             </div>
           </div>
 
-          {/* Profile view */}
+          {/* Employee profile modal */}
           {profileOpen && selectedEmployee && (
-            <div className="transition-transform duration-500 translate-x-0 opacity-100">
-              <div className="mt-2 rounded-3xl bg-white shadow-sm border border-yellow-100 px-4 py-4 sm:px-6 sm:py-5 md:px-8 md:py-6">
-                <button
-                  onClick={closeProfile}
-                  className="mb-4 inline-flex items-center gap-2 text-green-700 hover:text-yellow-400 font-semibold transition"
-                >
-                  ← Back to List
-                </button>
-                <h2 className="text-2xl font-bold text-green-800 mb-4">
-                  {selectedEmployee.name}'s Profile
-                </h2>
-
-                <div className="space-y-4">
-                  <p className="text-gray-700">
-                    <strong>Department:</strong> {selectedEmployee.department}
-                  </p>
-                  <p className="text-gray-700">
-                    <strong>Position:</strong> {selectedEmployee.position}
-                  </p>
-                  <p className="text-gray-700">
-                    <strong>Start Date:</strong> {selectedEmployee.startDate}
-                  </p>
-                  <p className="text-gray-700">
-                    <strong>Category:</strong> {selectedEmployee.category}
-                  </p>
-                  <p className="text-gray-700">
-                    <strong>Gender:</strong> {selectedEmployee.gender}
-                  </p>
-                  <p className="text-gray-700">
-                    <strong>Status:</strong> {selectedEmployee.status}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <EmployeeProfileModal
+              employee={selectedEmployee}
+              onClose={closeProfile}
+            />
           )}
         </div>
 
@@ -860,7 +849,9 @@ export default function EmployeeManagement() {
 
               <div className="flex items-center mb-4">
                 <span className="text-3xl mr-3">⚠️</span>
-                <h2 className="text-xl font-bold text-red-600">Confirm Deletion</h2>
+                <h2 className="text-xl font-bold text-red-600">
+                  Confirm Deletion
+                </h2>
               </div>
 
               <p className="text-gray-700 mb-2 text-sm">
@@ -868,14 +859,20 @@ export default function EmployeeManagement() {
               </p>
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
-                <p className="font-semibold text-green-800">{employeeToDelete.name}</p>
-                <p className="text-sm text-gray-600">{employeeToDelete.position}</p>
-                <p className="text-sm text-gray-600">{employeeToDelete.department}</p>
+                <p className="font-semibold text-green-800">
+                  {employeeToDelete.name}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {employeeToDelete.position}
+                </p>
+                <p className="text-sm text-gray-600">
+                  {employeeToDelete.department}
+                </p>
               </div>
 
               <p className="text-red-600 text-sm mb-4 font-semibold">
-                This action cannot be undone. Please enter your admin password to
-                confirm.
+                This action cannot be undone. Please enter your admin password
+                to confirm.
               </p>
 
               <form onSubmit={handleConfirmDelete} className="space-y-4">
@@ -895,7 +892,9 @@ export default function EmployeeManagement() {
                 </div>
 
                 {passwordError && (
-                  <p className="text-sm text-red-600 font-semibold">{passwordError}</p>
+                  <p className="text-sm text-red-600 font-semibold">
+                    {passwordError}
+                  </p>
                 )}
 
                 <div className="flex gap-3 pt-2">
@@ -920,6 +919,144 @@ export default function EmployeeManagement() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+/* ---------- Employee profile modal + helper ---------- */
+
+function EmployeeProfileModal({ employee, onClose }) {
+  const {
+    name,
+    email,
+    department,
+    position,
+    contact,
+    address,
+    profile_image_url,
+    status,
+    category,
+    gender,
+    startDate,
+  } = employee;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm px-4 py-8"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div 
+        className="relative max-w-lg w-full max-h-[85vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-32 h-8 bg-green-600 rounded-full blur-xl opacity-30 pointer-events-none" />
+
+        <div className="bg-white border border-yellow-300 shadow-xl rounded-3xl relative z-10 flex flex-col max-h-full overflow-hidden">
+          {/* Fixed header */}
+          <div className="flex-shrink-0 relative px-6 pt-6 sm:px-8 sm:pt-8">
+            <button
+              onClick={onClose}
+              className="absolute right-4 top-4 text-lg font-bold text-green-800 hover:text-red-500 w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 transition z-10"
+            >
+              ✕
+            </button>
+
+            <div className="flex flex-col items-center mb-4">
+              <div className="w-20 h-20 rounded-full bg-yellow-100 flex items-center justify-center overflow-hidden shadow-inner border-4 border-green-600/80">
+                {profile_image_url ? (
+                  <img
+                    src={profile_image_url}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-2xl text-green-800">👤</span>
+                )}
+              </div>
+
+              <p className="mt-2 text-[10px] uppercase tracking-wide text-green-700 font-semibold">
+                Employee Profile
+              </p>
+              <h1 className="mt-1 text-xl sm:text-2xl font-extrabold text-green-800 text-center">
+                {name || "Unknown Employee"}
+              </h1>
+              <p className="mt-1 text-[11px] sm:text-xs text-gray-500 text-center max-w-sm">
+                Overview of employee details from HR records
+              </p>
+            </div>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto px-6 sm:px-8 pb-6 sm:pb-8">
+            <div className="space-y-4">
+              {/* Personal Details */}
+              <div className="bg-green-50/70 border border-green-100 rounded-xl px-3 py-3 sm:px-4 sm:py-4">
+                <h2 className="text-xs font-semibold text-green-800 mb-2">
+                  Personal Details
+                </h2>
+                <div className="grid grid-cols-1 gap-2">
+                  <DisplayField label="Full Name" value={name} />
+                  <DisplayField label="Email" value={email} />
+                  <DisplayField label="Gender" value={gender} />
+                </div>
+              </div>
+
+              {/* Job Information */}
+              <div className="bg-yellow-50/80 border border-yellow-200 rounded-xl px-3 py-3 sm:px-4 sm:py-4">
+                <h2 className="text-xs font-semibold text-green-800 mb-2">
+                  Job Information
+                </h2>
+                <div className="grid grid-cols-2 gap-2">
+                  <DisplayField label="Department" value={department} />
+                  <DisplayField label="Position" value={position} />
+                  <DisplayField label="Category" value={category} />
+                  <DisplayField label="Start Date" value={startDate} />
+                  <div className="col-span-2">
+                    <DisplayField label="Status" value={status} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Details */}
+              <div className="bg-white border border-green-100 rounded-xl px-3 py-3 sm:px-4 sm:py-4">
+                <h2 className="text-xs font-semibold text-green-800 mb-2">
+                  Contact Details
+                </h2>
+                <div className="grid grid-cols-1 gap-2">
+                  <DisplayField label="Contact" value={contact} />
+                  <DisplayField label="Address" value={address} />
+                </div>
+              </div>
+
+              {/* Close button */}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-1.5 bg-green-700 text-white rounded-lg font-semibold text-xs hover:bg-green-600 shadow transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DisplayField({ label, value }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
+        {label}
+      </p>
+      <p className="mt-0.5 text-sm text-green-900 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
+        {value || "—"}
+      </p>
     </div>
   );
 }
