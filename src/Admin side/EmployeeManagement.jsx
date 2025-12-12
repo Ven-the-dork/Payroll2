@@ -756,7 +756,7 @@ export default function EmployeeManagement() {
               )}
 
               <div className="max-h-[650px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-2xl">
-                <table className="min-w-[900px] border-collapse text-sm sm:text-base">
+                <table className="w-full min-w-[900px] border-collapse text-sm sm:text-base">
                   <thead className="sticky top-0 bg-yellow-200 text-green-900 z-10">
                     <tr className="text-xs sm:text-sm font-semibold uppercase tracking-wide">
                       <th className="p-4 text-left">Employee</th>

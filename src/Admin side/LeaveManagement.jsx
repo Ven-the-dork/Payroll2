@@ -11,7 +11,8 @@ import {
   Bell,
   Settings,
   ChevronDown,
-  FileText,  // ← ADD THIS LINE
+  FileText,
+  Paperclip, // ← ADDED Paperclip icon
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -428,42 +429,40 @@ export default function LeaveManagement() {
               </button>
             </nav>
 
-<h3
-  className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
->
-  Organization
-</h3>
-<nav className="space-y-1">
-  <button
-    onClick={() => navigate("/employee-management")}
-    className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-  >
-    <Users size={18} />
-    {isOpen && "Employee Management"}
-  </button>
-  <button
-    className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
-  >
-    <CalendarDays size={18} />
-    {isOpen && "Leave Management"}
-  </button>
-  <button
-    onClick={() => navigate("/PayrollManagement")}
-    className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-  >
-    <CreditCard size={18} />
-    {isOpen && "Payroll Management"}
-  </button>
-  {/* NEW: Audit Logs Button */}
-  <button
-    onClick={() => navigate("/audit-logs")}
-    className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-  >
-    <FileText size={18} />
-    {isOpen && "Audit Logs"}
-  </button>
-</nav>
-
+            <h3
+              className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
+            >
+              Organization
+            </h3>
+            <nav className="space-y-1">
+              <button
+                onClick={() => navigate("/employee-management")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <Users size={18} />
+                {isOpen && "Employee Management"}
+              </button>
+              <button
+                className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
+              >
+                <CalendarDays size={18} />
+                {isOpen && "Leave Management"}
+              </button>
+              <button
+                onClick={() => navigate("/PayrollManagement")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <CreditCard size={18} />
+                {isOpen && "Payroll Management"}
+              </button>
+              <button
+                onClick={() => navigate("/audit-logs")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <FileText size={18} />
+                {isOpen && "Audit Logs"}
+              </button>
+            </nav>
           </div>
         </div>
 
@@ -1025,19 +1024,20 @@ export default function LeaveManagement() {
                       <th className="p-3 text-left">Duration</th>
                       <th className="p-3 text-left">Status</th>
                       <th className="p-3 text-left">Reason</th>
+                      <th className="p-3 text-left">File</th> {/* ← ADDED File Header */}
                       <th className="p-3 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loadingApplications ? (
                       <tr>
-                        <td colSpan="9" className="p-3 text-center text-sm text-gray-600">
+                        <td colSpan="10" className="p-3 text-center text-sm text-gray-600">
                           Loading applications...
                         </td>
                       </tr>
                     ) : leaveApplications.length === 0 ? (
                       <tr>
-                        <td colSpan="9" className="p-3 text-center text-sm text-gray-600">
+                        <td colSpan="10" className="p-3 text-center text-sm text-gray-600">
                           No leave applications yet.
                         </td>
                       </tr>
@@ -1085,6 +1085,22 @@ export default function LeaveManagement() {
                           <td className="p-3 text-[11px] sm:text-sm text-gray-800">
                             {item.reason}
                           </td>
+                          {/* ← ADDED File Column */}
+                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
+                            {item.attachment_url ? (
+                              <a 
+                                href={item.attachment_url} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                              >
+                                <Paperclip size={14} /> View
+                              </a>
+                            ) : (
+                              <span className="text-gray-400 italic text-xs">No file</span>
+                            )}
+                          </td>
+                          
                           <td className="relative p-3 sm:pr-4">
                             {item.status === "pending" ? (
                               <>

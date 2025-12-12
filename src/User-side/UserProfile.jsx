@@ -74,97 +74,99 @@ export default function UserProfile() {
     setProfile((prev) => ({ ...prev, [name]: value }));
   };
 
-const handleFileChange = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  // Validate file type
-  if (!file.type.startsWith('image/')) {
-    alert('Please select an image file (JPG, PNG, GIF, etc.)');
-    return;
-  }
-
-  // Validate file size (max 5MB)
-  if (file.size > 5 * 1024 * 1024) {
-    alert('Image must be smaller than 5MB');
-    return;
-  }
-
-  const stored = sessionStorage.getItem("user");
-  if (!stored) {
-    navigate("/");
-    return;
-  }
-  const user = JSON.parse(stored);
-  if (!user.employeeId) {
-    alert('Employee ID not found');
-    return;
-  }
-
-  try {
-    setUploading(true);
-
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${user.employeeId}-${Date.now()}.${fileExt}`;
-    const filePath = fileName;
-
-    console.log('Uploading to:', filePath);
-
-    // Upload to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      throw new Error(`Upload failed: ${uploadError.message}`);
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file (JPG, PNG, GIF, etc.)");
+      return;
     }
 
-    console.log('Upload successful:', uploadData);
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from("avatars")
-      .getPublicUrl(filePath);
-
-    const publicUrl = urlData.publicUrl;
-    console.log('Public URL:', publicUrl);
-
-    // Update database
-    const { error: updateError } = await supabase
-      .from("employees")
-      .update({ profile_image_url: publicUrl })
-      .eq("id", user.employeeId);
-
-    if (updateError) {
-      console.error('Database update error:', updateError);
-      throw new Error(`Database update failed: ${updateError.message}`);
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image must be smaller than 5MB");
+      return;
     }
 
-    // Update local state
-    setProfile((prev) => ({ ...prev, profileImageUrl: publicUrl }));
+    const stored = sessionStorage.getItem("user");
+    if (!stored) {
+      navigate("/");
+      return;
+    }
+    const user = JSON.parse(stored);
+    if (!user.employeeId) {
+      alert("Employee ID not found");
+      return;
+    }
 
-    // Update sessionStorage
-    sessionStorage.setItem(
-      "user",
-      JSON.stringify({
-        ...user,
+    try {
+      setUploading(true);
+
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user.employeeId}-${Date.now()}.${fileExt}`;
+      const filePath = fileName;
+
+      console.log("Uploading to:", filePath);
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        throw new Error("Upload failed: " + uploadError.message);
+      }
+
+      console.log("Upload successful:", uploadData);
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      const publicUrl = urlData.publicUrl;
+      console.log("Public URL:", publicUrl);
+
+      // Update database
+      const { error: updateError } = await supabase
+        .from("employees")
+        .update({ profile_image_url: publicUrl })
+        .eq("id", user.employeeId);
+
+      if (updateError) {
+        console.error("Database update error:", updateError);
+        throw new Error("Database update failed: " + updateError.message);
+      }
+
+      // Update local state
+      setProfile((prev) => ({
+        ...prev,
         profileImageUrl: publicUrl,
-      })
-    );
+      }));
 
-    alert('Profile picture updated successfully!');
-  } catch (err) {
-    console.error("Error uploading avatar:", err);
-    alert(`Failed to upload profile picture: ${err.message}`);
-  } finally {
-    setUploading(false);
-  }
-};
+      // Update sessionStorage
+      sessionStorage.setItem(
+        "user",
+        JSON.stringify({
+          ...user,
+          profileImageUrl: publicUrl,
+        })
+      );
 
+      alert("Profile picture updated successfully!");
+    } catch (err) {
+      console.error("Error uploading avatar:", err);
+      alert("Failed to upload profile picture: " + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -178,11 +180,11 @@ const handleFileChange = async (e) => {
     const user = JSON.parse(stored);
 
     try {
+      // Note: email is NOT updated here anymore
       const { error } = await supabase
         .from("employees")
         .update({
           full_name: profile.name,
-          email: profile.email,
           position: profile.position,
           department: profile.department,
           contact: profile.contact,
@@ -197,7 +199,6 @@ const handleFileChange = async (e) => {
         JSON.stringify({
           ...user,
           fullName: profile.name,
-          email: profile.email,
           position: profile.position,
           department: profile.department,
         })
@@ -293,9 +294,13 @@ const handleFileChange = async (e) => {
                   <input
                     name="email"
                     value={profile.email}
-                    onChange={handleInputChange}
-                    className="w-full rounded-lg px-3 py-2 bg-yellow-50 border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600 text-sm"
+                    readOnly
+                    className="w-full rounded-lg px-3 py-2 bg-gray-100 border border-gray-300 text-gray-600 text-sm cursor-not-allowed"
+                    title="Email cannot be changed"
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Email cannot be modified
+                  </p>
                 </div>
               </div>
             </div>
