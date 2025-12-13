@@ -3,19 +3,21 @@ import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
-import {
-  LayoutDashboard,
-  Mail,
-  Users,
-  CalendarDays,
-  CreditCard,
-  Power,
-  Menu,
-  Search,
-  Bell,
-  Settings,
+import { 
+  LayoutDashboard, 
+  Mail, 
+  Users, 
+  CalendarDays, 
+  CreditCard, 
+  Power, 
+  Menu, 
+  Search, 
+  Bell, 
+  Settings, 
   FileText,
+  Clock // <--- ADD THIS
 } from "lucide-react";
+
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -138,7 +140,12 @@ export default function Dashboard() {
               >
                 <CreditCard size={18} /> {isOpen && "Payroll Management"}
               </button>
-              {/* NEW: Audit Logs Button */}
+              <button
+              onClick={() => navigate("/time-tracking")}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+            >
+              <Clock size={18} /> {isOpen && "Time Tracking"}
+            </button>
               <button
                 onClick={() => navigate("/audit-logs")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"

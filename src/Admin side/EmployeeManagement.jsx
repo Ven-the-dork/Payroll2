@@ -12,6 +12,7 @@ import {
   Settings,
   ChevronDown,
   FileText,
+  Clock, // <-- Added Clock icon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -143,7 +144,6 @@ export default function EmployeeManagement() {
   const [employeeData, setEmployeeData] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [employeesError, setEmployeesError] = useState("");
-
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState("full_name");
   const [sortDirection, setSortDirection] = useState("asc");
@@ -492,6 +492,16 @@ export default function EmployeeManagement() {
                 <CreditCard size={18} />
                 {isOpen && "Payroll Management"}
               </button>
+              
+              {/* Added Time Tracking Button */}
+              <button
+                onClick={() => navigate("/time-tracking")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <Clock size={18} />
+                {isOpen && "Time Tracking"}
+              </button>
+
               <button
                 onClick={() => navigate("/audit-logs")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
@@ -996,67 +1006,115 @@ function EmployeeProfileModal({ employee, onClose }) {
                 <h2 className="text-xs font-semibold text-green-800 mb-2">
                   Personal Details
                 </h2>
-                <div className="grid grid-cols-1 gap-2">
-                  <DisplayField label="Full Name" value={name} />
-                  <DisplayField label="Email" value={email} />
-                  <DisplayField label="Gender" value={gender} />
-                </div>
-              </div>
-
-              {/* Job Information */}
-              <div className="bg-yellow-50/80 border border-yellow-200 rounded-xl px-3 py-3 sm:px-4 sm:py-4">
-                <h2 className="text-xs font-semibold text-green-800 mb-2">
-                  Job Information
-                </h2>
-                <div className="grid grid-cols-2 gap-2">
-                  <DisplayField label="Department" value={department} />
-                  <DisplayField label="Position" value={position} />
-                  <DisplayField label="Category" value={category} />
-                  <DisplayField label="Start Date" value={startDate} />
-                  <div className="col-span-2">
-                    <DisplayField label="Status" value={status} />
+                <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
+                  <div>
+                    <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Position
+                    </span>
+                    <span className="text-gray-800 font-medium truncate block">
+                      {position || "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Department
+                    </span>
+                    <span className="text-gray-800 font-medium truncate block">
+                      {department || "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Status
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${
+                        status === "Active"
+                          ? "bg-green-100 text-green-700 border-green-200"
+                          : "bg-red-100 text-red-700 border-red-200"
+                      }`}
+                    >
+                      {status || "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Category
+                    </span>
+                    <span className="text-gray-800 font-medium truncate block">
+                      {category || "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Gender
+                    </span>
+                    <span className="text-gray-800 font-medium truncate block">
+                      {gender || "N/A"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                      Joined
+                    </span>
+                    <span className="text-gray-800 font-medium truncate block">
+                      {startDate || "N/A"}
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Contact Details */}
-              <div className="bg-white border border-green-100 rounded-xl px-3 py-3 sm:px-4 sm:py-4">
+              <div className="bg-yellow-50/70 border border-yellow-100 rounded-xl px-3 py-3 sm:px-4 sm:py-4">
                 <h2 className="text-xs font-semibold text-green-800 mb-2">
-                  Contact Details
+                  Contact Information
                 </h2>
-                <div className="grid grid-cols-1 gap-2">
-                  <DisplayField label="Contact" value={contact} />
-                  <DisplayField label="Address" value={address} />
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 bg-white p-1 rounded border border-yellow-200 text-yellow-500">
+                      <Mail size={14} />
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                        Email Address
+                      </span>
+                      <span className="text-gray-800 font-medium break-all">
+                        {email || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 bg-white p-1 rounded border border-yellow-200 text-yellow-500">
+                      <span className="text-xs">📞</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                        Phone Number
+                      </span>
+                      <span className="text-gray-800 font-medium">
+                        {contact || "N/A"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 bg-white p-1 rounded border border-yellow-200 text-yellow-500">
+                      <span className="text-xs">🏠</span>
+                    </div>
+                    <div>
+                      <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
+                        Address
+                      </span>
+                      <span className="text-gray-800 font-medium">
+                        {address || "N/A"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              {/* Close button */}
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-1.5 bg-green-700 text-white rounded-lg font-semibold text-xs hover:bg-green-600 shadow transition"
-                >
-                  Close
-                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function DisplayField({ label, value }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">
-        {label}
-      </p>
-      <p className="mt-0.5 text-sm text-green-900 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2">
-        {value || "—"}
-      </p>
     </div>
   );
 }

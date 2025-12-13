@@ -12,8 +12,10 @@ import {
   Settings,
   ChevronDown,
   FileText,
-  Paperclip, // ← ADDED Paperclip icon
+  Paperclip,
+  Clock, // ✅ ADD THIS
 } from "lucide-react";
+
 
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -455,6 +457,16 @@ export default function LeaveManagement() {
                 <CreditCard size={18} />
                 {isOpen && "Payroll Management"}
               </button>
+
+              {/* ✅ ADD THIS Time Tracking button */}
+              <button
+                onClick={() => navigate("/time-tracking")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <Clock size={18} />
+                {isOpen && "Time Tracking"}
+              </button>
+
               <button
                 onClick={() => navigate("/audit-logs")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
@@ -462,6 +474,7 @@ export default function LeaveManagement() {
                 <FileText size={18} />
                 {isOpen && "Audit Logs"}
               </button>
+
             </nav>
           </div>
         </div>

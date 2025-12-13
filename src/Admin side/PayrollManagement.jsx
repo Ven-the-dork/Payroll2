@@ -11,7 +11,9 @@ import {
   Settings,
   Download,
   FileText,
+  Clock, // ✅ ADD THIS
 } from "lucide-react";
+
 
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -181,12 +183,21 @@ export default function PayrollManagement() {
                 {isOpen && "Leave Management"}
               </button>
               <button
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
+                className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
               >
                 <CreditCard size={18} />
                 {isOpen && "Payroll Management"}
               </button>
-              {/* Audit Logs Button */}
+
+              {/* ✅ Time Tracking */}
+              <button
+                onClick={() => navigate("/time-tracking")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <Clock size={18} />
+                {isOpen && "Time Tracking"}
+              </button>
+
               <button
                 onClick={() => navigate("/audit-logs")}
                 className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
@@ -194,6 +205,7 @@ export default function PayrollManagement() {
                 <FileText size={18} />
                 {isOpen && "Audit Logs"}
               </button>
+
             </nav>
           </div>
         </div>

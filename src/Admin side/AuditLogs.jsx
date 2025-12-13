@@ -12,7 +12,9 @@ import {
   Settings,
   FileText,
   Download,
+  Clock, 
 } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
@@ -198,6 +200,13 @@ export default function AuditLogs() {
               >
                 <CreditCard size={18} />
                 {isOpen && "Payroll Management"}
+              </button>
+              <button
+                onClick={() => navigate("/time-tracking")}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
+              >
+                <Clock size={18} />
+                {isOpen && "Time Tracking"}
               </button>
               <button
                 className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"

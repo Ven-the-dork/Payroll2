@@ -13,6 +13,7 @@ import Applyforleave from "../User-side/Applyforleave";
 import UserProfile from "../User-side/UserProfile"; // ← make sure this path is correct
 import ProtectedRoute from "./ProtectedRoute";
 import PayrollManagement from "./PayrollManagement";
+import TimeTracking from "./TimeTracking";
 
 function App() {
   return (
@@ -64,7 +65,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-
+        <Route
+          path="/time-tracking"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <TimeTracking />
+            </ProtectedRoute>
+          }
+        />
         {/* User-only Routes */}
         <Route
           path="/dashboard_user"
