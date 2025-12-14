@@ -1,3 +1,4 @@
+import { clockifyClockIn, clockifyClockOut } from "../utils/clockifyClient";
 import { useState, useEffect } from "react";
 import {
   Bell,
@@ -43,10 +44,12 @@ const chartData = [
 ];
 
 export default function Dashboard() {
+  const [attendanceMessage, setAttendanceMessage] = useState("");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isClockedIn, setIsClockedIn] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -107,23 +110,49 @@ export default function Dashboard() {
     navigate("/", { replace: true });
   };
 
+  const handleClock = async (type) => {
+    try {
+      setAttendanceMessage("");
+      if (type === "in") {
+        await clockifyClockIn();
+        setIsClockedIn(true);
+        setAttendanceMessage("Clocked in successfully.");
+      } else {
+        await clockifyClockOut();
+        setIsClockedIn(false);
+        setAttendanceMessage("Clocked out successfully.");
+      }
+    } catch (e) {
+      setAttendanceMessage(
+        e.message || "Failed to send a request to the Edge Function"
+      );
+    }
+  };
+
   const quickActions = [
+    {
+      label: "Clock in",
+      type: "in",
+    },
+    {
+      label: "Clock out",
+      type: "out",
+    },
     {
       label: "Apply for Leave",
       onClick: () => navigate("/applyforleave"),
     },
     {
       label: "Update Profile",
-      onClick: () => setProfileModalOpen(true),
+      onClick: () => navigate("/profile"), // go to full profile page
+      // if you still want modal instead: () => setProfileModalOpen(true)
     },
   ];
 
-  function handleProfileChange(e) {
-    setProfile((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-  }
+  const handleProfileChange = (e) => {
+    const { name, value } = e.target;
+    setProfile((prev) => ({ ...prev, [name]: value }));
+  };
 
   return (
     <div className="min-h-screen bg-green-50 text-green-900">
@@ -192,18 +221,63 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Quick actions with clock styling */}
             <div className="mt-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
-              {quickActions.map((action) => (
-                <button
-                  key={action.label}
-                  className="bg-yellow-400 shadow px-6 py-2 rounded-lg font-semibold text-green-900 hover:bg-yellow-300 hover:scale-105 transition border-none cursor-pointer w-full sm:w-auto sm:min-w-[180px]"
-                  onClick={action.onClick}
-                >
-                  {action.label}
-                </button>
-              ))}
+              {quickActions.map((action) => {
+                const isClockIn = action.type === "in";
+                const isClockOut = action.type === "out";
+
+                const isActiveClockIn = isClockIn && isClockedIn;
+                const isActiveClockOut = isClockOut && !isClockedIn;
+
+                const baseClasses =
+                  "shadow px-6 py-2 rounded-lg font-semibold border-none cursor-pointer w-full sm:w-auto sm:min-w-[180px] transition";
+
+                const inactiveClockIn =
+                  "bg-yellow-400 text-green-900 hover:bg-yellow-300 hover:scale-105";
+                const inactiveClockOut =
+                  "bg-yellow-400 text-green-900 hover:bg-red-500 hover:text-white hover:scale-105";
+                const inactiveDefault =
+                  "bg-yellow-400 text-green-900 hover:bg-yellow-300 hover:scale-105";
+
+                const activeClock =
+                  "bg-blue-500 text-white hover:bg-blue-600 hover:scale-105";
+
+                let colorClasses = inactiveDefault;
+
+                if (isClockIn) {
+                  colorClasses = inactiveClockIn;
+                } else if (isClockOut) {
+                  colorClasses = inactiveClockOut;
+                }
+
+                if (isActiveClockIn || isActiveClockOut) {
+                  colorClasses = activeClock;
+                }
+
+                const onClick = action.type
+                  ? () => handleClock(action.type)
+                  : action.onClick;
+
+                return (
+                  <button
+                    key={action.label}
+                    className={`${baseClasses} ${colorClasses}`}
+                    onClick={onClick}
+                  >
+                    {action.label}
+                  </button>
+                );
+              })}
             </div>
 
+            {attendanceMessage && (
+              <p className="mt-2 text-sm text-green-800">
+                {attendanceMessage}
+              </p>
+            )}
+
+            {/* Example dashboard widgets – you can keep your own */}
             <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="bg-green-700 p-4 rounded-xl shadow-lg text-white">
                 <h3 className="font-bold mb-3 text-yellow-300">
@@ -510,7 +584,7 @@ function PayrollAnalytics() {
         </ResponsiveContainer>
       </div>
 
-      {/* Bottom two charts */}
+      {/* Bottom two charts placeholders */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl p-4 shadow">
           <h3 className="text-sm font-semibold text-green-800 mb-4">
@@ -552,7 +626,7 @@ function ProgressBar({ label, value, percent }) {
   );
 }
 
-/* ===== PROFILE MODAL ===== */
+/* ===== PROFILE MODAL (optional, if you still want it) ===== */
 
 function ProfileModal({ onClose, profile, onChange }) {
   return (

@@ -1,22 +1,28 @@
 import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
-  Mail,
   Users,
   CalendarDays,
   CreditCard,
   Power,
   Menu,
   Search,
-  Bell,
   Settings,
   ChevronDown,
+  FileText,
+  Paperclip,
+  Clock, 
 } from "lucide-react";
+
+
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
-
+import AdminBell from "../components/AdminBell";
+import AdminSidebar from "../components/Adminnavbar/Leavedashvar";
+import FontSizeMenu from "../components/hooks/FontSizeMenu";
+import AdminSetting from "../components/Adminsetting";
 export default function LeaveManagement() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
@@ -391,77 +397,12 @@ export default function LeaveManagement() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white">
       {/* Sidebar */}
-      <aside
-        className={`w-full lg:flex-shrink-0 ${sidebarWidth} max-w-full bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-4 lg:py-6 transition-all duration-300`}
-      >
-        <div>
-          {/* Profile Section */}
-          <div
-            className={`flex flex-col items-center mb-8 transition-all duration-300 ${hideWhenCollapsed}`}
-          >
-            <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-yellow-400 flex items-center justify-center shadow-lg">
-              <span className="text-2xl lg:text-3xl font-bold text-green-800">👤</span>
-            </div>
-            <h2 className="mt-3 text-base lg:text-lg text-white font-bold">
-              {currentUser?.fullName}
-            </h2>
-            <p className="text-yellow-300 text-xs lg:text-sm">
-              {currentUser?.position}
-            </p>
-          </div>
-
-          {/* Nav */}
-          <div className="px-4">
-            <h3
-              className={`text-yellow-300 text-xs uppercase mb-2 ${hideWhenCollapsed}`}
-            >
-              Features
-            </h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => navigate("/dashboard")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <LayoutDashboard size={18} /> {isOpen && "Dashboard"}
-              </button>
-            </nav>
-
-            <h3
-              className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
-            >
-              Organization
-            </h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => navigate("/employee-management")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <Users size={18} /> {isOpen && "Employee Management"}
-              </button>
-              <button className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm">
-                <CalendarDays size={18} /> {isOpen && "Leave Management"}
-              </button>
-              <button 
-                onClick={() => navigate("/PayrollManagement")}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm">
-                <CreditCard size={18} /> {isOpen && "Payroll Management"}
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        {/* Logout */}
-        <div className="px-4 lg:px-6 mt-4 lg:mt-0">
-          <button
-            onClick={handleLogout}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
-          >
-            <Power size={18} />
-            {isOpen && "Log Out"}
-          </button>
-        </div>
-      </aside>
-
+      <AdminSidebar
+        isOpen={isOpen}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onNavigate={(path) => navigate(path)}
+      />
       {/* Main Content */}
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
         {/* Top bar */}
@@ -490,15 +431,20 @@ export default function LeaveManagement() {
 
           {/* Right icons */}
           <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Bell size={18} />
-            </button>
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Settings size={18} />
-            </button>
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Mail size={18} />
-            </button>
+          <AdminBell />
+            <AdminSetting
+              trigger={
+                <button
+                  type="button"
+                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 hover:bg-yellow-300 transition"
+                  aria-label="Settings"
+                >
+                  <Settings size={18} />
+                </button>
+              }
+            >
+              {({ close }) => <FontSizeMenu closeMenu={close} />}
+            </AdminSetting>
           </div>
         </div>
 
@@ -1008,19 +954,20 @@ export default function LeaveManagement() {
                       <th className="p-3 text-left">Duration</th>
                       <th className="p-3 text-left">Status</th>
                       <th className="p-3 text-left">Reason</th>
+                      <th className="p-3 text-left">File</th> {/* ← ADDED File Header */}
                       <th className="p-3 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loadingApplications ? (
                       <tr>
-                        <td colSpan="9" className="p-3 text-center text-sm text-gray-600">
+                        <td colSpan="10" className="p-3 text-center text-sm text-gray-600">
                           Loading applications...
                         </td>
                       </tr>
                     ) : leaveApplications.length === 0 ? (
                       <tr>
-                        <td colSpan="9" className="p-3 text-center text-sm text-gray-600">
+                        <td colSpan="10" className="p-3 text-center text-sm text-gray-600">
                           No leave applications yet.
                         </td>
                       </tr>
@@ -1068,6 +1015,22 @@ export default function LeaveManagement() {
                           <td className="p-3 text-[11px] sm:text-sm text-gray-800">
                             {item.reason}
                           </td>
+                          {/* ← ADDED File Column */}
+                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
+                            {item.attachment_url ? (
+                              <a 
+                                href={item.attachment_url} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                              >
+                                <Paperclip size={14} /> View
+                              </a>
+                            ) : (
+                              <span className="text-gray-400 italic text-xs">No file</span>
+                            )}
+                          </td>
+                          
                           <td className="relative p-3 sm:pr-4">
                             {item.status === "pending" ? (
                               <>
