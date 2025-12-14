@@ -10,6 +10,8 @@ import {
   Receipt,
   BarChart3,
 } from "lucide-react";
+import { HelpCircle } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
@@ -24,6 +26,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import FAQModal from "../components/FAQModal"; 
 
 const DEFAULT_PROFILE = {
   name: "Abercener Iakobo",
@@ -33,7 +36,6 @@ const DEFAULT_PROFILE = {
   contact: "+63 900 000 0000",
   address: "123 Main Street, City",
 };
-
 const chartData = [
   { month: "Jul", earnings: 63500, netPay: 49500, deductions: 14000 },
   { month: "Aug", earnings: 67500, netPay: 53500, deductions: 14000 },
@@ -50,6 +52,8 @@ export default function Dashboard() {
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const [currentUser, setCurrentUser] = useState(null);
   const [isClockedIn, setIsClockedIn] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(false);
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -198,7 +202,20 @@ export default function Dashboard() {
               <BarChart3 size={18} />
               <span>Analytics</span>
             </li>
+              <li
+                onClick={() => setFaqOpen(true)}
+                className={`flex items-center gap-2 pb-2 cursor-pointer border-b-2 transition ${
+                  faqOpen
+                    ? "border-green-600 text-green-700"
+                    : "border-transparent text-gray-400 hover:text-green-600"
+                }`}
+              >
+                <HelpCircle size={18} />
+                <span>FAQ</span>
+              </li>
           </ul>
+
+
 
           <div className="flex items-center space-x-4">
             <Bell className="w-5 h-5 text-green-600 hover:text-yellow-500 cursor-pointer transition" />
@@ -351,14 +368,17 @@ export default function Dashboard() {
       </main>
 
       {profileModalOpen && (
-        <ProfileModal
-          onClose={() => setProfileModalOpen(false)}
-          profile={profile}
-          onChange={handleProfileChange}
-        />
-      )}
-    </div>
-  );
+          <ProfileModal
+            onClose={() => setProfileModalOpen(false)}
+            profile={profile}
+            onChange={handleProfileChange}
+          />
+        )}
+
+        <FAQModal open={faqOpen} onClose={() => setFaqOpen(false)} />
+
+        </div>
+        );
 }
 
 /* ===== PAYROLL HISTORY ===== */
@@ -727,5 +747,6 @@ function ProfileModal({ onClose, profile, onChange }) {
         </form>
       </div>
     </div>
+    
   );
 }
