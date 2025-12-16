@@ -6,23 +6,24 @@ import Dashboard from "./Dashboard";
 import EmployeeManagement from "./EmployeeManagement";
 import LeaveManagement from "./LeaveManagement";
 import LoginPage from "./Loginpage";
-import AdminLogin from "./Adminloginpage"; 
+import AdminLogin from "./Adminloginpage";
 import AuditLogs from "./AuditLogs";
-
 import DashboardUser from "../User-side/DashboardUser";
 import Applyforleave from "../User-side/Applyforleave";
-
+import UserProfile from "../User-side/UserProfile"; 
 import ProtectedRoute from "./ProtectedRoute";
 import PayrollManagement from "./PayrollManagement";
+import TimeTracking from "./TimeTracking";
 
 function App() {
   return (
+    <div className="app-root">
     <Router>
       <DynamicTitle />
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<LoginPage />} />
-        <Route path="/admin-login" element={<AdminLogin />} /> 
+        <Route path="/admin-login" element={<AdminLogin />} />
 
         {/* Admin-only Routes */}
         <Route
@@ -33,12 +34,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route 
-        path="/audit-logs" 
-        element={<ProtectedRoute 
-        requiredRole="admin">
-          <AuditLogs />
-        </ProtectedRoute>} />
+        <Route
+          path="/audit-logs"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AuditLogs />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/employee-management"
           element={
@@ -63,7 +66,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-
+        <Route
+          path="/time-tracking"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <TimeTracking />
+            </ProtectedRoute>
+          }
+        />
         {/* User-only Routes */}
         <Route
           path="/dashboard_user"
@@ -81,8 +91,17 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute requiredRole="user">
+              <UserProfile />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
     </Router>
+    </div>
   );
 }
 

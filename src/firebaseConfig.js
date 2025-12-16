@@ -1,14 +1,14 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
-// Replace with your actual Firebase config from Step 2
+// Firebase config from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyCQxzmA4KyslCDEB_J3G9fvpvpDfY6vdk8",
-  authDomain: "cvsu-payroll.firebaseapp.com",
-  projectId: "cvsu-payroll",
-  storageBucket: "cvsu-payroll.firebasestorage.app",
-  messagingSenderId: "607770244208",
-  appId: "1:607770244208:web:20193ea851c41096f130b5"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase

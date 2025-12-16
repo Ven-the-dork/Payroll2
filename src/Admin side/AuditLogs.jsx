@@ -1,37 +1,29 @@
 import { useState, useEffect } from "react";
-import {
-  LayoutDashboard,
-  Mail,
-  Users,
-  CalendarDays,
-  CreditCard,
-  Power,
-  Menu,
-  Search,
-  Bell,
-  Settings,
-  FileText,
-  Download,
-} from "lucide-react";
+import { Menu, Search, Settings, Download } from "lucide-react";
+
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
 
+import AdminBell from "../components/AdminBell";
+import AdminSidebar from "../components/Adminnavbar/Auditdashvar"; 
+import FontSizeMenu from "../components/hooks/FontSizeMenu";
+import AdminSetting from "../components/Adminsetting";
+
 export default function AuditLogs() {
   const navigate = useNavigate();
+
   const [isOpen, setIsOpen] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
+
   const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAction, setFilterAction] = useState("all");
   const [sortDirection, setSortDirection] = useState("desc");
-
-  const sidebarWidth = isOpen ? "lg:w-64" : "lg:w-20";
-  const hideWhenCollapsed = !isOpen && "hidden lg:block";
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -60,17 +52,15 @@ export default function AuditLogs() {
       let query = supabase
         .from("audit_logs")
         .select("*")
-        .order("created_at", { ascending: sortDirection === "asc" });
+        .order("timestamp", { ascending: sortDirection === "asc" });
 
-      // Filter by action type
       if (filterAction !== "all") {
         query = query.eq("action", filterAction);
       }
 
-      // Search by admin name or details
       if (searchTerm.trim()) {
         query = query.or(
-          `performed_by.ilike.%${searchTerm}%,details.ilike.%${searchTerm}%`
+          `user_name.ilike.%${searchTerm}%,details.ilike.%${searchTerm}%`
         );
       }
 
@@ -89,7 +79,6 @@ export default function AuditLogs() {
     fetchAuditLogs();
   }, [searchTerm, filterAction, sortDirection]);
 
-  // Format date
   const formatDate = (timestamp) => {
     const date = new Date(timestamp);
     return date.toLocaleString("en-US", {
@@ -101,7 +90,6 @@ export default function AuditLogs() {
     });
   };
 
-  // Get action badge color
   const getActionBadge = (action) => {
     const badges = {
       admin_login: { bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
@@ -113,112 +101,45 @@ export default function AuditLogs() {
       rejected_leave: { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" },
     };
 
-    return badges[action] || { bg: "bg-gray-100", text: "text-gray-800", border: "border-gray-300" };
+    return badges[action] || {
+      bg: "bg-gray-100",
+      text: "text-gray-800",
+      border: "border-gray-300",
+    };
   };
 
-  // Export to CSV
   const exportToCSV = () => {
     const headers = ["Timestamp", "Action", "Performed By", "Details"];
-    const rows = auditLogs.map(log => [
-      formatDate(log.created_at),
+    const rows = auditLogs.map((log) => [
+      formatDate(log.timestamp),
       log.action,
-      log.performed_by || "System",
-      log.details
+      log.user_name || "System",
+      log.details,
     ]);
 
     const csvContent = [
       headers.join(","),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `audit_logs_${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `audit_logs_${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
   };
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white">
-      {/* Sidebar */}
-      <aside
-        className={`w-full lg:flex-shrink-0 ${sidebarWidth} max-w-full bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-4 lg:py-6 transition-all duration-300 relative`}
-      >
-        <div>
-          <div
-            className={`flex flex-col items-center mb-8 transition-all duration-300 ${hideWhenCollapsed}`}
-          >
-            <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-yellow-400 flex items-center justify-center shadow-lg">
-              <span className="text-2xl lg:text-3xl font-bold text-green-800">👤</span>
-            </div>
-            <h2 className="mt-3 text-base lg:text-lg text-white font-bold">
-              {currentUser?.fullName}
-            </h2>
-            <p className="text-yellow-300 text-xs lg:text-sm">{currentUser?.position}</p>
-          </div>
-
-          <div className="px-4">
-            <h3 className={`text-yellow-300 text-xs uppercase mb-2 ${hideWhenCollapsed}`}>
-              Features
-            </h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => navigate("/dashboard")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <LayoutDashboard size={18} />
-                {isOpen && "Dashboard"}
-              </button>
-            </nav>
-
-            <h3
-              className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
-            >
-              Organization
-            </h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => navigate("/employee-management")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <Users size={18} />
-                {isOpen && "Employee Management"}
-              </button>
-              <button
-                onClick={() => navigate("/leave-management")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <CalendarDays size={18} />
-                {isOpen && "Leave Management"}
-              </button>
-              <button
-                onClick={() => navigate("/PayrollManagement")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <CreditCard size={18} />
-                {isOpen && "Payroll Management"}
-              </button>
-              <button
-                className="w-full flex items-center gap-3 px-3 py-2 cursor-pointer rounded-full bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
-              >
-                <FileText size={18} />
-                {isOpen && "Audit Logs"}
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        <div className="px-4 lg:px-6 mt-4 lg:mt-0">
-          <button
-            onClick={handleLogout}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
-          >
-            <Power size={18} />
-            {isOpen && "Log Out"}
-          </button>
-        </div>
-      </aside>
+   
+      <AdminSidebar
+        isOpen={isOpen}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onNavigate={(path) => navigate(path)}
+        activePath="/audit-logs"  // if your sidebar supports it; otherwise remove
+      />
 
       {/* Main Content */}
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
@@ -231,7 +152,7 @@ export default function AuditLogs() {
             <Menu size={28} />
           </button>
 
-          {/* Search */}
+          {/* Search + toolbar */}
           <div className="flex-1 flex flex-col items-center">
             <div className="w-full md:max-w-xl relative mb-2">
               <input
@@ -247,7 +168,6 @@ export default function AuditLogs() {
               />
             </div>
 
-            {/* Filter toolbar */}
             <div className="flex flex-wrap justify-center gap-2 text-xs sm:text-sm">
               <select
                 value={filterAction}
@@ -281,15 +201,20 @@ export default function AuditLogs() {
 
           {/* Icon buttons */}
           <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Bell size={18} />
-            </button>
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Settings size={18} />
-            </button>
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Mail size={18} />
-            </button>
+            <AdminBell />
+              <AdminSetting
+              trigger={
+                <button
+                  type="button"
+                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 hover:bg-yellow-300 transition"
+                  aria-label="Settings"
+                >
+                  <Settings size={18} />
+                </button>
+              }
+            >
+              {({ close }) => <FontSizeMenu closeMenu={close} />}
+            </AdminSetting>
           </div>
         </div>
 
@@ -297,18 +222,12 @@ export default function AuditLogs() {
         <h1 className="text-3xl md:text-4xl font-extrabold text-green-800 mb-3">
           Audit Logs
         </h1>
-        <p className="text-gray-600 mb-6">
-          Complete activity history and audit trail
-        </p>
+        <p className="text-gray-600 mb-6">Complete activity history and audit trail</p>
 
-        {/* Audit Logs Table */}
+        {/* Table */}
         <div className="mt-2 rounded-3xl bg-white shadow-sm border border-yellow-100 px-4 py-4 sm:px-6 sm:py-5 md:px-8 md:py-6">
-          {loading && (
-            <p className="mb-2 text-sm text-gray-500">Loading audit logs...</p>
-          )}
-          {error && (
-            <p className="mb-2 text-sm text-red-600">{error}</p>
-          )}
+          {loading && <p className="mb-2 text-sm text-gray-500">Loading audit logs...</p>}
+          {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
 
           {!loading && !error && (
             <div className="max-h-[650px] overflow-x-auto overflow-y-auto border border-yellow-200 rounded-2xl">
@@ -339,7 +258,7 @@ export default function AuditLogs() {
                           } hover:bg-yellow-100 transition`}
                         >
                           <td className="p-4 text-sm text-gray-600">
-                            {formatDate(log.created_at)}
+                            {formatDate(log.timestamp)}
                           </td>
                           <td className="p-4">
                             <span
@@ -349,11 +268,9 @@ export default function AuditLogs() {
                             </span>
                           </td>
                           <td className="p-4 text-sm text-gray-800 font-medium">
-                            {log.performed_by || "System"}
+                            {log.user_name || "System"}
                           </td>
-                          <td className="p-4 text-sm text-gray-600">
-                            {log.details}
-                          </td>
+                          <td className="p-4 text-sm text-gray-600">{log.details}</td>
                         </tr>
                       );
                     })

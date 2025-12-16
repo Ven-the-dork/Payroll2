@@ -14,3 +14,20 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+# Employee Management System
+
+## Setup Instructions
+
+1. Clone the repository
+2. Install dependencies:
+
+3. Create `.env.local` file in the project root and add your API keys:
+
+## Environment Variables
+
+See `.env.example` for required environment variables.
+
+- Firebase credentials can be obtained from [Firebase Console](https://console.firebase.google.com/)
+- Supabase credentials can be obtained from [Supabase Dashboard](https://supabase.com/dashboard)
+

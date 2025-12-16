@@ -115,7 +115,7 @@ export default function AdminLogin() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="kingjustinbororo@gmail.com"
+                placeholder="Email"
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200 transition-all bg-gray-50"
                 required
                 disabled={loading}
@@ -131,7 +131,7 @@ export default function AdminLogin() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••"
+                  placeholder="Password"
                   className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-200 transition-all bg-gray-50 pr-12"
                   required
                   disabled={loading}
