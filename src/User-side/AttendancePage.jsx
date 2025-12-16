@@ -2,12 +2,14 @@ import { useState } from "react";
 import { clockifyClockIn, clockifyClockOut } from "../utils/clockifyClient";
 
 export default function AttendancePage() {
-  const [loading, setLoading] = useState(false);
+  // string | null: "in", "out", or null
+  const [loading, setLoading] = useState(null);
   const [message, setMessage] = useState("");
 
   const handle = async (type) => {
-    setLoading(true);
+    setLoading(type);
     setMessage("");
+
     try {
       if (type === "in") {
         await clockifyClockIn();
@@ -17,32 +19,41 @@ export default function AttendancePage() {
         setMessage("Clocked out.");
       }
     } catch (e) {
-      setMessage(e.message || "Error");
+      const msg =
+        e && typeof e === "object" && "message" in e
+          ? e.message
+          : "Something went wrong.";
+      setMessage(msg);
+      console.error("Attendance error:", e);
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
   return (
     <div className="p-6 max-w-md mx-auto">
       <h1 className="text-xl font-semibold mb-4">Attendance</h1>
+
       <div className="flex gap-4 mb-4">
         <button
           onClick={() => handle("in")}
-          disabled={loading}
-          className="px-4 py-2 bg-green-600 text-white rounded"
+          disabled={loading !== null}
+          className="px-4 py-2 bg-green-600 text-white rounded disabled:opacity-60"
         >
-          Clock in
+          {loading === "in" ? "Clocking in..." : "Clock in"}
         </button>
+
         <button
           onClick={() => handle("out")}
-          disabled={loading}
-          className="px-4 py-2 bg-red-600 text-white rounded"
+          disabled={loading !== null}
+          className="px-4 py-2 bg-red-600 text-white rounded disabled:opacity-60"
         >
-          Clock out
+          {loading === "out" ? "Clocking out..." : "Clock out"}
         </button>
       </div>
+
       {message && <p className="text-sm">{message}</p>}
     </div>
   );
 }
+

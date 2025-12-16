@@ -8,11 +8,10 @@ import {
   Power,
   Menu,
   Search,
-  Bell,
   Settings,
   ChevronDown,
   FileText,
-  Clock, // <-- Added Clock icon
+  Clock, 
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -23,8 +22,10 @@ import {
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
 import { logAudit } from "../utils/auditLog";
-
-/* ---------- Action dropdown ---------- */
+import AdminBell from "../components/AdminBell";
+import AdminSidebar from "../components/Adminnavbar/Employeesidebar";
+import FontSizeMenu from "../components/hooks/FontSizeMenu";
+import AdminSetting from "../components/Adminsetting";
 
 function ActionDropdown({ onViewProfile, onDelete }) {
   const [open, setOpen] = useState(false);
@@ -431,100 +432,12 @@ export default function EmployeeManagement() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-white">
       {/* Sidebar */}
-      <aside
-        className={`w-full lg:flex-shrink-0 ${sidebarWidth} max-w-full bg-green-700 text-white rounded-r-lg flex flex-col justify-between py-4 lg:py-6 transition-all duration-300 relative`}
-      >
-        <div>
-          <div
-            className={`flex flex-col items-center mb-8 transition-all duration-300 ${hideWhenCollapsed}`}
-          >
-            <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-yellow-400 flex items-center justify-center shadow-lg">
-              <span className="text-2xl lg:text-3xl font-bold text-green-800">
-                👤
-              </span>
-            </div>
-            <h2 className="mt-3 text-base lg:text-lg text-white font-bold">
-              {currentUser?.fullName}
-            </h2>
-            <p className="text-yellow-300 text-xs lg:text-sm">
-              {currentUser?.position}
-            </p>
-          </div>
-
-          <div className="px-4">
-            <h3 className={`text-yellow-300 text-xs uppercase mb-2 ${hideWhenCollapsed}`}>
-              Features
-            </h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => navigate("/dashboard")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <LayoutDashboard size={18} />
-                {isOpen && "Dashboard"}
-              </button>
-            </nav>
-
-            <h3
-              className={`text-yellow-300 text-xs uppercase mt-6 mb-2 ${hideWhenCollapsed}`}
-            >
-              Organization
-            </h3>
-            <nav className="space-y-1">
-              <button
-                onClick={() => navigate("/employee-management")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer bg-yellow-400 text-green-900 font-semibold shadow-sm text-sm"
-              >
-                <Users size={18} />
-                {isOpen && "Employee Management"}
-              </button>
-              <button
-                onClick={() => navigate("/leave-management")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <CalendarDays size={18} />
-                {isOpen && "Leave Management"}
-              </button>
-              <button
-                onClick={() => navigate("/PayrollManagement")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <CreditCard size={18} />
-                {isOpen && "Payroll Management"}
-              </button>
-              
-              {/* Added Time Tracking Button */}
-              <button
-                onClick={() => navigate("/time-tracking")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <Clock size={18} />
-                {isOpen && "Time Tracking"}
-              </button>
-
-              <button
-                onClick={() => navigate("/audit-logs")}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-full cursor-pointer hover:bg-white/10 text-white/90 hover:text-white transition font-semibold text-sm"
-              >
-                <FileText size={18} />
-                {isOpen && "Audit Logs"}
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        <div className="px-4 lg:px-6 mt-4 lg:mt-0">
-          <button
-            onClick={handleLogout}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-green-900 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 active:scale-0.98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-400 shadow-lg transition-all"
-          >
-            <Power size={18} />
-            {isOpen && "Log Out"}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
+      <AdminSidebar
+        isOpen={isOpen}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onNavigate={(path) => navigate(path)}
+      />
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
         {/* Top bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
@@ -586,15 +499,20 @@ export default function EmployeeManagement() {
 
           {/* Icon buttons */}
           <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Bell size={18} />
-            </button>
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Settings size={18} />
-            </button>
-            <button className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 cursor-pointer hover:bg-yellow-300 transition">
-              <Mail size={18} />
-            </button>
+             <AdminBell />
+            <AdminSetting
+              trigger={
+                <button
+                  type="button"
+                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 hover:bg-yellow-300 transition"
+                  aria-label="Settings"
+                >
+                  <Settings size={18} />
+                </button>
+              }
+            >
+              {({ close }) => <FontSizeMenu closeMenu={close} />}
+            </AdminSetting>
           </div>
         </div>
 

@@ -10,13 +10,14 @@ import AdminLogin from "./Adminloginpage";
 import AuditLogs from "./AuditLogs";
 import DashboardUser from "../User-side/DashboardUser";
 import Applyforleave from "../User-side/Applyforleave";
-import UserProfile from "../User-side/UserProfile"; // ← make sure this path is correct
+import UserProfile from "../User-side/UserProfile"; 
 import ProtectedRoute from "./ProtectedRoute";
 import PayrollManagement from "./PayrollManagement";
 import TimeTracking from "./TimeTracking";
 
 function App() {
   return (
+    <div className="app-root">
     <Router>
       <DynamicTitle />
       <Routes>
@@ -100,6 +101,7 @@ function App() {
         />
       </Routes>
     </Router>
+    </div>
   );
 }
 
