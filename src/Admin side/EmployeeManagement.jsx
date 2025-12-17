@@ -253,17 +253,21 @@ export default function EmployeeManagement() {
       const firebaseUser = cred.user;
 
       const { error } = await supabase.from("employees").insert({
-        firebase_uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        full_name: name,
-        department,
-        position,
-        start_date: startDate,
-        category,
-        gender,
-        status: "Active",
-        role,
-      });
+      firebase_uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      full_name: name,
+      department,
+      position,
+      start_date: startDate,
+      category,
+      gender,
+      status: "Active",
+      role,
+
+      // ✅ auto-set same Clockify ID for every new employee
+      clockify_user_id: "69399acc2d8d3a36ae5cfa9b",
+    });
+
 
       if (error) {
         console.error("SUPABASE ERROR:", error.message, error.details, error.hint);

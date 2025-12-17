@@ -82,7 +82,7 @@ export default function LoginPage() {
 
       // 3. ONLY ALLOW REGULAR USERS (block admins)
       if (userProfile.role === "admin") {
-        setError("Admin users should use the admin portal.");
+        setError("Invalid user account");
         await auth.signOut();
         return;
       }
@@ -157,7 +157,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@company.com"
+                placeholder="Enter your Email"
                 required
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600 transition"
               />

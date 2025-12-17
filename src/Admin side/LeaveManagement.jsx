@@ -1,20 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  LayoutDashboard,
-  Users,
-  CalendarDays,
-  CreditCard,
-  Power,
-  Menu,
-  Search,
-  Settings,
-  ChevronDown,
-  FileText,
-  Paperclip,
-  Clock, 
-} from "lucide-react";
-
-
+import { Menu, Search, Settings, ChevronDown, Paperclip } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
@@ -23,6 +8,7 @@ import AdminBell from "../components/AdminBell";
 import AdminSidebar from "../components/Adminnavbar/Leavedashvar";
 import FontSizeMenu from "../components/hooks/FontSizeMenu";
 import AdminSetting from "../components/Adminsetting";
+
 export default function LeaveManagement() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
@@ -30,17 +16,17 @@ export default function LeaveManagement() {
   const [openDropdown, setOpenDropdown] = useState(null);
   const [openHistoryDropdown, setOpenHistoryDropdown] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
-  
+
   const [leaveApplications, setLeaveApplications] = useState([]);
   const [loadingApplications, setLoadingApplications] = useState(true);
 
   // State for leave plans from Supabase
   const [leavePlans, setLeavePlans] = useState([]);
-  
+
   // State for ongoing leaves (recall)
   const [ongoingLeaves, setOngoingLeaves] = useState([]);
   const [loadingOngoing, setLoadingOngoing] = useState(true);
-  
+
   // Form state for creating leave plan
   const [leavePlanName, setLeavePlanName] = useState("");
   const [durationDays, setDurationDays] = useState("");
@@ -76,6 +62,32 @@ export default function LeaveManagement() {
     navigate("/", { replace: true });
   };
 
+  // -------------------------
+  // Notifications helper
+  // -------------------------
+  const createLeaveNotification = async ({
+    employeeId,
+    leaveApplicationId,
+    type,
+    title,
+    message,
+  }) => {
+    if (!employeeId || !leaveApplicationId) return;
+
+    const { error } = await supabase.from("notifications").insert({
+      employee_id: employeeId,
+      leave_application_id: leaveApplicationId,
+      type,
+      title,
+      message,
+    });
+
+    if (error) {
+      console.error("Failed to create notification:", error);
+      // Don't block admin flow if notification insert fails
+    }
+  };
+
   // Load user from session
   useEffect(() => {
     const stored = sessionStorage.getItem("user");
@@ -96,6 +108,7 @@ export default function LeaveManagement() {
         .select("*")
         .eq("is_active", true)
         .order("name");
+
       if (!error && data) {
         setLeavePlans(data);
       }
@@ -109,11 +122,13 @@ export default function LeaveManagement() {
       setLoadingApplications(true);
       const { data, error } = await supabase
         .from("leave_applications")
-        .select(`
+        .select(
+          `
           *,
           employees (full_name, department),
           leave_plans (name)
-        `)
+        `
+        )
         .order("applied_at", { ascending: false });
 
       if (!error && data) {
@@ -129,22 +144,26 @@ export default function LeaveManagement() {
   useEffect(() => {
     async function fetchOngoingLeaves() {
       setLoadingOngoing(true);
-      const today = new Date().toISOString().split('T')[0];
-      
+      const today = new Date().toISOString().split("T")[0];
+
       const { data, error } = await supabase
         .from("leave_applications")
-        .select(`
+        .select(
+          `
           *,
           employees (full_name, department),
           leave_plans (name, allow_recall)
-        `)
+        `
+        )
         .eq("status", "approved")
         .lte("start_date", today)
         .gte("end_date", today)
         .order("start_date", { ascending: false });
 
       if (!error && data) {
-        const recallableLeaves = data.filter(leave => leave.leave_plans?.allow_recall === true);
+        const recallableLeaves = data.filter(
+          (leave) => leave.leave_plans?.allow_recall === true
+        );
         setOngoingLeaves(recallableLeaves);
       }
       setLoadingOngoing(false);
@@ -156,7 +175,7 @@ export default function LeaveManagement() {
   // Create new leave plan
   async function handleCreateLeaveSetting(e) {
     e.preventDefault();
-    
+
     if (!leavePlanName || !durationDays) {
       alert("Please fill in Leave Plan Name and Duration");
       return;
@@ -188,9 +207,31 @@ export default function LeaveManagement() {
     }
   }
 
-  // Approve leave application
+  // Approve leave application (+ notification)
   async function handleApproveLeave(applicationId) {
     if (!confirm("Are you sure you want to approve this leave application?")) return;
+
+    // fetch row for employee_id (and for nicer message)
+    const { data: appRow, error: fetchError } = await supabase
+      .from("leave_applications")
+      .select(
+        `
+        id,
+        employee_id,
+        start_date,
+        end_date,
+        leave_plans (name),
+        employees (full_name)
+      `
+      )
+      .eq("id", applicationId)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching leave row:", fetchError);
+      alert("Failed to fetch leave application data");
+      return;
+    }
 
     const { error } = await supabase
       .from("leave_applications")
@@ -204,36 +245,79 @@ export default function LeaveManagement() {
     if (error) {
       console.error("Error approving leave:", error);
       alert("Failed to approve leave application");
-    } else {
-      setLeaveApplications((prev) =>
-        prev.map((app) =>
-          app.id === applicationId
-            ? { ...app, status: "approved", reviewed_at: new Date().toISOString() }
-            : app
-        )
-      );
-      alert("Leave application approved!");
-      setOpenHistoryDropdown(null);
+      return;
     }
+
+    await createLeaveNotification({
+      employeeId: appRow.employee_id,
+      leaveApplicationId: appRow.id,
+      type: "leave_approved",
+      title: "Leave approved",
+      message: `Your ${appRow.leave_plans?.name || "leave"} request was approved (${appRow.start_date} to ${appRow.end_date}).`,
+    });
+
+    setLeaveApplications((prev) =>
+      prev.map((app) =>
+        app.id === applicationId
+          ? { ...app, status: "approved", reviewed_at: new Date().toISOString() }
+          : app
+      )
+    );
+
+    alert("Leave application approved!");
+    setOpenHistoryDropdown(null);
   }
 
-  // Reject leave application
-  async function handleRejectLeave(applicationId) {
-    if (!confirm("Are you sure you want to reject this leave application?")) return;
+  // Reject/Decline leave application (+ notification)
+    async function handleRejectLeave(applicationId) {
+      if (!confirm("Are you sure you want to reject this leave application?")) return;
 
-    const { error } = await supabase
-      .from("leave_applications")
-      .update({
-        status: "rejected",
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: currentUser?.uid || currentUser?.firebase_uid,
-      })
-      .eq("id", applicationId);
+      // 1) fetch row to get employee_id + leave plan name for the message
+      const { data: appRow, error: fetchError } = await supabase
+        .from("leave_applications")
+        .select(`
+          id,
+          employee_id,
+          start_date,
+          end_date,
+          leave_plans (name),
+          employees (full_name)
+        `)
+        .eq("id", applicationId)
+        .single();
 
-    if (error) {
-      console.error("Error rejecting leave:", error);
-      alert("Failed to reject leave application");
-    } else {
+      if (fetchError) {
+        console.error("Error fetching leave row:", fetchError);
+        alert("Failed to fetch leave application data");
+        return;
+      }
+
+      // 2) update status
+      const { error } = await supabase
+        .from("leave_applications")
+        .update({
+          status: "rejected",
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: currentUser?.uid || currentUser?.firebase_uid,
+        })
+        .eq("id", applicationId);
+
+      if (error) {
+        console.error("Error rejecting leave:", error);
+        alert("Failed to reject leave application");
+        return;
+      }
+
+      // 3) insert notification (this is what makes it appear on DashboardUser)
+      await createLeaveNotification({
+        employeeId: appRow.employee_id,
+        leaveApplicationId: appRow.id,
+        type: "leave_declined", // must match your CHECK constraint
+        title: "Leave declined",
+        message: `Your ${appRow.leave_plans?.name || "leave"} request was declined.`,
+      });
+
+      // 4) update UI
       setLeaveApplications((prev) =>
         prev.map((app) =>
           app.id === applicationId
@@ -241,10 +325,10 @@ export default function LeaveManagement() {
             : app
         )
       );
+
       alert("Leave application rejected!");
       setOpenHistoryDropdown(null);
     }
-  }
 
   // Start editing leave plan
   function handleStartEdit(plan) {
@@ -258,7 +342,7 @@ export default function LeaveManagement() {
   // Save edited plan
   async function handleSaveEdit(e) {
     e.preventDefault();
-    
+
     if (!editName || !editDuration) {
       alert("Please fill in all fields");
       return;
@@ -280,11 +364,11 @@ export default function LeaveManagement() {
       setLeavePlans((prev) =>
         prev.map((plan) =>
           plan.id === editingPlan.id
-            ? { 
-                ...plan, 
-                name: editName, 
+            ? {
+                ...plan,
+                name: editName,
                 duration_days: Number(editDuration),
-                allow_recall: editAllowRecall === "Yes"
+                allow_recall: editAllowRecall === "Yes",
               }
             : plan
         )
@@ -350,7 +434,7 @@ export default function LeaveManagement() {
     return diffDays > 0 ? diffDays : 0;
   }
 
-  // Submit recall
+  // Submit recall (+ notification)
   async function handleSubmitRecall(e) {
     e.preventDefault();
 
@@ -366,6 +450,9 @@ export default function LeaveManagement() {
 
     setSubmittingRecall(true);
 
+    const leaveId = selectedRecallLeave?.id;
+    const employeeId = selectedRecallLeave?.employee_id;
+
     const { error } = await supabase
       .from("leave_applications")
       .update({
@@ -373,20 +460,29 @@ export default function LeaveManagement() {
         reviewed_at: new Date().toISOString(),
         reviewed_by: currentUser?.uid || currentUser?.firebase_uid,
       })
-      .eq("id", selectedRecallLeave.id);
+      .eq("id", leaveId);
 
     setSubmittingRecall(false);
 
     if (error) {
       console.error("Error recalling leave:", error);
       alert("Failed to recall leave: " + error.message);
-    } else {
-      setOngoingLeaves((prev) =>
-        prev.filter((leave) => leave.id !== selectedRecallLeave.id)
-      );
-      alert(`Leave recalled successfully! Employee should resume on ${recallNewResumptionDate}`);
-      handleCloseRecallModal();
+      return;
     }
+
+    await createLeaveNotification({
+      employeeId,
+      leaveApplicationId: leaveId,
+      type: "leave_recalled",
+      title: "Leave recalled",
+      message: `Your leave was recalled. Please resume on ${recallNewResumptionDate}.`,
+    });
+
+    setOngoingLeaves((prev) => prev.filter((leave) => leave.id !== leaveId));
+    alert(
+      `Leave recalled successfully! Employee should resume on ${recallNewResumptionDate}`
+    );
+    handleCloseRecallModal();
   }
 
   const btnBase =
@@ -403,6 +499,7 @@ export default function LeaveManagement() {
         onLogout={handleLogout}
         onNavigate={(path) => navigate(path)}
       />
+
       {/* Main Content */}
       <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
         {/* Top bar */}
@@ -414,24 +511,10 @@ export default function LeaveManagement() {
             <Menu size={28} />
           </button>
 
-          {/* Search */}
-          <div className="flex-1 flex flex-col items-center">
-            <div className="w-full md:max-w-md relative">
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full rounded-full border-2 border-yellow-300 px-4 pr-10 py-2 text-sm md:text-base text-green-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-              />
-              <Search
-                size={18}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-yellow-400 cursor-pointer"
-              />
-            </div>
-          </div>
 
           {/* Right icons */}
           <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">
-          <AdminBell />
+            <AdminBell />
             <AdminSetting
               trigger={
                 <button
@@ -509,7 +592,10 @@ export default function LeaveManagement() {
                 <h2 className="text-lg md:text-xl font-semibold underline text-green-800">
                   Create Leave Settings
                 </h2>
-                <form onSubmit={handleCreateLeaveSetting} className="space-y-3 text-sm">
+                <form
+                  onSubmit={handleCreateLeaveSetting}
+                  className="space-y-3 text-sm"
+                >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-green-800 font-semibold mb-1">
@@ -525,7 +611,9 @@ export default function LeaveManagement() {
                         <option value="Sick Leave">Sick Leave</option>
                         <option value="Maternity Leave">Maternity Leave</option>
                         <option value="Paternity Leave">Paternity Leave</option>
-                        <option value="Compassionate Leave">Compassionate Leave</option>
+                        <option value="Compassionate Leave">
+                          Compassionate Leave
+                        </option>
                         <option value="Casual Leave">Casual Leave</option>
                         <option value="Study Leave">Study Leave</option>
                         <option value="Exam Leave">Exam Leave</option>
@@ -549,7 +637,7 @@ export default function LeaveManagement() {
                     <label className="block text-green-800 font-semibold mb-1">
                       Activate Leave Recall for this plan?
                     </label>
-                    <select 
+                    <select
                       value={allowRecall}
                       onChange={(e) => setAllowRecall(e.target.value)}
                       className="w-full p-2 bg-yellow-50 rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600"
@@ -586,7 +674,7 @@ export default function LeaveManagement() {
                 <h2 className="text-lg md:text-xl font-semibold mb-3 text-green-800">
                   Manage Leave Settings
                 </h2>
-                
+
                 {/* Edit Form */}
                 {editingPlan && (
                   <div className="mb-4 p-4 bg-yellow-50 rounded-lg border-2 border-green-600">
@@ -607,9 +695,15 @@ export default function LeaveManagement() {
                             <option value="">Select leave plan</option>
                             <option value="Annual Leave">Annual Leave</option>
                             <option value="Sick Leave">Sick Leave</option>
-                            <option value="Maternity Leave">Maternity Leave</option>
-                            <option value="Paternity Leave">Paternity Leave</option>
-                            <option value="Compassionate Leave">Compassionate Leave</option>
+                            <option value="Maternity Leave">
+                              Maternity Leave
+                            </option>
+                            <option value="Paternity Leave">
+                              Paternity Leave
+                            </option>
+                            <option value="Compassionate Leave">
+                              Compassionate Leave
+                            </option>
                             <option value="Casual Leave">Casual Leave</option>
                             <option value="Study Leave">Study Leave</option>
                             <option value="Exam Leave">Exam Leave</option>
@@ -627,6 +721,7 @@ export default function LeaveManagement() {
                           />
                         </div>
                       </div>
+
                       <div>
                         <label className="block text-green-800 font-semibold mb-1 text-sm">
                           Allow Recall?
@@ -641,6 +736,7 @@ export default function LeaveManagement() {
                           <option value="No">No</option>
                         </select>
                       </div>
+
                       <div className="flex gap-2">
                         <button
                           type="submit"
@@ -674,7 +770,10 @@ export default function LeaveManagement() {
                     <tbody>
                       {leavePlans.length === 0 ? (
                         <tr>
-                          <td colSpan="4" className="p-3 text-center text-sm text-gray-600">
+                          <td
+                            colSpan="4"
+                            className="p-3 text-center text-sm text-gray-600"
+                          >
                             No leave plans created yet.
                           </td>
                         </tr>
@@ -685,7 +784,9 @@ export default function LeaveManagement() {
                             className={`h-11 ${
                               index % 2 === 0 ? "bg-yellow-50" : "bg-white"
                             } hover:bg-yellow-100 transition ${
-                              editingPlan?.id === plan.id ? "ring-2 ring-green-600" : ""
+                              editingPlan?.id === plan.id
+                                ? "ring-2 ring-green-600"
+                                : ""
                             }`}
                           >
                             <td className="p-3 text-[11px] sm:text-sm text-gray-800">
@@ -706,13 +807,13 @@ export default function LeaveManagement() {
                               </button>
                               {openDropdown === index && (
                                 <div className="absolute z-50 mt-2 w-32 bg-white border border-yellow-200 rounded-md shadow-lg overflow-hidden">
-                                  <button 
+                                  <button
                                     onClick={() => handleStartEdit(plan)}
                                     className="block w-full text-left px-3 py-2 text-sm text-green-900 hover:bg-yellow-50"
                                   >
                                     Edit
                                   </button>
-                                  <button 
+                                  <button
                                     onClick={() => handleDeleteLeavePlan(plan.id)}
                                     className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                                   >
@@ -754,13 +855,19 @@ export default function LeaveManagement() {
                   <tbody>
                     {loadingOngoing ? (
                       <tr>
-                        <td colSpan="8" className="p-3 text-center text-sm text-gray-600">
+                        <td
+                          colSpan="8"
+                          className="p-3 text-center text-sm text-gray-600"
+                        >
                           Loading ongoing leaves...
                         </td>
                       </tr>
                     ) : ongoingLeaves.length === 0 ? (
                       <tr>
-                        <td colSpan="8" className="p-3 text-center text-sm text-gray-600">
+                        <td
+                          colSpan="8"
+                          className="p-3 text-center text-sm text-gray-600"
+                        >
                           No ongoing recallable leaves at the moment.
                         </td>
                       </tr>
@@ -850,6 +957,7 @@ export default function LeaveManagement() {
                           className="w-full bg-yellow-50 border border-yellow-200 rounded-md p-2"
                         />
                       </div>
+
                       <div className="flex flex-col sm:flex-row gap-3">
                         <div className="flex-1">
                           <label className="block text-green-800 mb-1 font-semibold">
@@ -874,6 +982,7 @@ export default function LeaveManagement() {
                           />
                         </div>
                       </div>
+
                       <div className="flex flex-col sm:flex-row gap-3">
                         <div className="flex-1">
                           <label className="block text-green-800 mb-1 font-semibold">
@@ -895,11 +1004,12 @@ export default function LeaveManagement() {
                             value={recallNewResumptionDate}
                             onChange={(e) => setRecallNewResumptionDate(e.target.value)}
                             required
-                            min={new Date().toISOString().split('T')[0]}
+                            min={new Date().toISOString().split("T")[0]}
                             className="w-full bg-white border border-yellow-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-green-600"
                           />
                         </div>
                       </div>
+
                       <div>
                         <label className="block text-green-800 mb-1 font-semibold">
                           Reason for Recall *
@@ -913,6 +1023,7 @@ export default function LeaveManagement() {
                           className="w-full bg-white border border-yellow-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-green-600"
                         />
                       </div>
+
                       <div className="flex justify-between gap-3 pt-2">
                         <button
                           type="submit"
@@ -954,20 +1065,26 @@ export default function LeaveManagement() {
                       <th className="p-3 text-left">Duration</th>
                       <th className="p-3 text-left">Status</th>
                       <th className="p-3 text-left">Reason</th>
-                      <th className="p-3 text-left">File</th> {/* ← ADDED File Header */}
+                      <th className="p-3 text-left">File</th>
                       <th className="p-3 text-left">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loadingApplications ? (
                       <tr>
-                        <td colSpan="10" className="p-3 text-center text-sm text-gray-600">
+                        <td
+                          colSpan="10"
+                          className="p-3 text-center text-sm text-gray-600"
+                        >
                           Loading applications...
                         </td>
                       </tr>
                     ) : leaveApplications.length === 0 ? (
                       <tr>
-                        <td colSpan="10" className="p-3 text-center text-sm text-gray-600">
+                        <td
+                          colSpan="10"
+                          className="p-3 text-center text-sm text-gray-600"
+                        >
                           No leave applications yet.
                         </td>
                       </tr>
@@ -1009,28 +1126,31 @@ export default function LeaveManagement() {
                                   : "bg-yellow-200 text-yellow-800"
                               }`}
                             >
-                              {item.status.toUpperCase()}
+                              {String(item.status || "pending").toUpperCase()}
                             </span>
                           </td>
                           <td className="p-3 text-[11px] sm:text-sm text-gray-800">
                             {item.reason}
                           </td>
-                          {/* ← ADDED File Column */}
+
+                          {/* File Column */}
                           <td className="p-3 text-[11px] sm:text-sm text-gray-800">
                             {item.attachment_url ? (
-                              <a 
-                                href={item.attachment_url} 
-                                target="_blank" 
+                              <a
+                                href={item.attachment_url}
+                                target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium"
                               >
                                 <Paperclip size={14} /> View
                               </a>
                             ) : (
-                              <span className="text-gray-400 italic text-xs">No file</span>
+                              <span className="text-gray-400 italic text-xs">
+                                No file
+                              </span>
                             )}
                           </td>
-                          
+
                           <td className="relative p-3 sm:pr-4">
                             {item.status === "pending" ? (
                               <>
@@ -1059,7 +1179,11 @@ export default function LeaveManagement() {
                               </>
                             ) : (
                               <span className="text-xs text-gray-500 italic">
-                                {item.status === "approved" ? "Approved" : item.status === "recalled" ? "Recalled" : "Declined"}
+                                {item.status === "approved"
+                                  ? "Approved"
+                                  : item.status === "recalled"
+                                  ? "Recalled"
+                                  : "Declined"}
                               </span>
                             )}
                           </td>
