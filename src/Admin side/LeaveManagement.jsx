@@ -511,20 +511,6 @@ export default function LeaveManagement() {
             <Menu size={28} />
           </button>
 
-          {/* Search */}
-          <div className="flex-1 flex flex-col items-center">
-            <div className="w-full md:max-w-md relative">
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full rounded-full border-2 border-yellow-300 px-4 pr-10 py-2 text-sm md:text-base text-green-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-              />
-              <Search
-                size={18}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-yellow-400 cursor-pointer"
-              />
-            </div>
-          </div>
 
           {/* Right icons */}
           <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">

@@ -178,7 +178,7 @@ export default function Dashboard() {
           {/* Payrolls */}
           <div className="bg-white rounded-2xl shadow-sm border border-yellow-200 p-6">
             <h2 className="text-lg font-bold text-green-800 mb-2">Payrolls</h2>
-            <p className="text-sm text-gray-600 mb-4">Feature coming soon</p>
+            <p className="text-sm text-gray-600 mb-4">Process Payroll</p>
             <button
               onClick={() => navigate("/PayrollManagement")}
               className="inline-flex items-center gap-2 rounded-full bg-green-700 px-4 py-2 text-sm font-bold text-white cursor-pointer hover:bg-green-800 transition"

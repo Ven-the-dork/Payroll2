@@ -1,25 +1,16 @@
-import { clockifyClockIn, clockifyClockOut } from "../utils/clockifyClient";
-import { useEffect, useState } from "react";
+import { clockifyClockIn } from "../utils/clockifyClient";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 import { supabase } from "../supabaseClient";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import UserTopBar from "../components/UserTopBar";
 import { useUserNotifications } from "../components/hooks/useUserNotifications";
 
-import { X, LayoutGrid, Receipt, BarChart3, HelpCircle } from "lucide-react";
-
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import { X, LayoutGrid, Receipt, HelpCircle, Eye, Download } from "lucide-react";
 
 import FAQModal from "../components/FAQModal";
 
@@ -32,25 +23,31 @@ const DEFAULT_PROFILE = {
   address: "123 Main Street, City",
 };
 
-const chartData = [
-  { month: "Jul", earnings: 63500, netPay: 49500, deductions: 14000 },
-  { month: "Aug", earnings: 67500, netPay: 53500, deductions: 14000 },
-  { month: "Sep", earnings: 64000, netPay: 50000, deductions: 14000 },
-  { month: "Oct", earnings: 71500, netPay: 57500, deductions: 14000 },
-  { month: "Nov", earnings: 62000, netPay: 48000, deductions: 14000 },
-  { month: "Dec", earnings: 68000, netPay: 54000, deductions: 14000 },
-];
+const TZ = "Asia/Singapore";
+function getSgShiftDate(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
 
-// ✅ One place to translate errors into friendly messages
+  const map = {};
+  for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
+
+  return `${map.year}-${map.month}-${map.day}`; // YYYY-MM-DD
+}
+
 function toUserMessage(err) {
   const raw = err?.message || err?.error_description || err?.error || "";
   const msg = String(raw).toLowerCase();
 
   if (msg.includes("not logged in")) return "Session expired. Please log in again.";
-  if (msg.includes("failed to fetch")) return "Network error. Check your internet and try again.";
-  if (msg.includes("no running time entry")) return "You are not clocked in yet (nothing to clock out).";
+  if (msg.includes("failed to fetch"))
+    return "Network error. Check your internet and try again.";
   if (msg.includes("already clocked in")) return "Already clocked in today.";
-  if (msg.includes("clockify api call failed")) return "Clockify is unavailable right now. Try again in a moment.";
+  if (msg.includes("clockify api call failed"))
+    return "Clockify is unavailable right now. Try again in a moment.";
 
   return raw || "Something went wrong. Please try again.";
 }
@@ -64,16 +61,21 @@ export default function DashboardUser() {
   const [currentUser, setCurrentUser] = useState(null);
   const [employeeId, setEmployeeId] = useState(null);
 
-  const [isClockedIn, setIsClockedIn] = useState(false);
+  const [hasClockedInToday, setHasClockedInToday] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
 
   const [clockLoading, setClockLoading] = useState(false);
+
+  // Leave dynamic states
+  const [leaveOptions, setLeaveOptions] = useState([]);
+  const [leaveBalances, setLeaveBalances] = useState({});
+  const [loadingLeaves, setLoadingLeaves] = useState(true);
 
   // notifications dropdown state
   const [notifOpen, setNotifOpen] = useState(false);
   const { notifications, unreadCount, markAllRead } = useUserNotifications(
     employeeId,
-    notifOpen,
+    notifOpen
   );
 
   const navigate = useNavigate();
@@ -119,7 +121,32 @@ export default function DashboardUser() {
     loadEmployeeId();
   }, [currentUser, employeeId]);
 
-  // Heartbeat: mark employee online (optional)
+  // Sync clock status
+  const syncClockStatus = useCallback(async () => {
+    if (!employeeId) return;
+
+    const todayShiftDate = getSgShiftDate(new Date());
+
+    const { data, error } = await supabase
+      .from("attendance_logs")
+      .select("id")
+      .eq("employee_id", employeeId)
+      .eq("shift_date", todayShiftDate)
+      .limit(1);
+
+    if (error) {
+      console.error("Failed to sync clock status:", error);
+      return;
+    }
+
+    setHasClockedInToday((data?.length ?? 0) > 0);
+  }, [employeeId]);
+
+  useEffect(() => {
+    syncClockStatus();
+  }, [syncClockStatus]);
+
+  // Heartbeat
   useEffect(() => {
     if (!employeeId) return;
 
@@ -128,7 +155,7 @@ export default function DashboardUser() {
         .from("employees")
         .update({
           status: "Active",
-          lastseen: new Date().toISOString(),
+          last_seen: new Date().toISOString(),
         })
         .eq("id", employeeId);
     };
@@ -137,10 +164,7 @@ export default function DashboardUser() {
     const interval = setInterval(heartbeat, 30_000);
 
     const goOffline = async () => {
-      await supabase
-        .from("employees")
-        .update({ status: "Inactive" })
-        .eq("id", employeeId);
+      await supabase.from("employees").update({ status: "Inactive" }).eq("id", employeeId);
     };
 
     window.addEventListener("beforeunload", goOffline);
@@ -148,7 +172,6 @@ export default function DashboardUser() {
     return () => {
       clearInterval(interval);
       window.removeEventListener("beforeunload", goOffline);
-      goOffline();
     };
   }, [employeeId]);
 
@@ -158,16 +181,11 @@ export default function DashboardUser() {
     navigate("/", { replace: true });
   };
 
-  const handleClock = async (type) => {
+  const handleClockIn = async () => {
     if (clockLoading) return;
 
-    // ✅ extra UI guards (nice UX)
-    if (type === "in" && isClockedIn) {
+    if (hasClockedInToday) {
       setAttendanceMessage("Already clocked in today.");
-      return;
-    }
-    if (type === "out" && !isClockedIn) {
-      setAttendanceMessage("You are not clocked in yet.");
       return;
     }
 
@@ -175,16 +193,11 @@ export default function DashboardUser() {
     setAttendanceMessage("");
 
     try {
-      const res = type === "in" ? await clockifyClockIn() : await clockifyClockOut();
-
-      // backend message if provided (e.g. Already clocked in today)
-      setAttendanceMessage(
-        res?.message ?? (type === "in" ? "Clock in processed." : "Clock out processed."),
-      );
-
-      setIsClockedIn(type === "in");
+      const res = await clockifyClockIn();
+      setAttendanceMessage(res?.message ?? "Clock in processed.");
+      await syncClockStatus();
     } catch (err) {
-      console.error("Clock action error:", err);
+      console.error("Clock in error:", err);
       setAttendanceMessage(toUserMessage(err));
     } finally {
       setClockLoading(false);
@@ -192,8 +205,7 @@ export default function DashboardUser() {
   };
 
   const quickActions = [
-    { label: "Clock in", type: "in" },
-    { label: "Clock out", type: "out" },
+    { label: "Clock in", onClick: handleClockIn, isClockAction: true },
     { label: "Apply for Leave", onClick: () => navigate("/applyforleave") },
     { label: "Update Profile", onClick: () => navigate("/profile") },
   ];
@@ -203,9 +215,69 @@ export default function DashboardUser() {
     setProfile((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Fetch leave plans
+  useEffect(() => {
+    async function fetchLeaveOptions() {
+      setLoadingLeaves(true);
+
+      const { data, error } = await supabase
+        .from("leave_plans")
+        .select("id, name, duration_days")
+        .eq("is_active", true)
+        .order("name");
+
+      if (!error && data) {
+        setLeaveOptions(
+          data.map((row) => ({
+            id: row.id,
+            label: row.name,
+            days: row.duration_days,
+          }))
+        );
+      }
+
+      setLoadingLeaves(false);
+    }
+
+    fetchLeaveOptions();
+  }, []);
+
+  // Calculate leave balances
+  useEffect(() => {
+    async function calculateBalances() {
+      if (!currentUser?.uid || leaveOptions.length === 0) return;
+
+      const { data: applications, error } = await supabase
+        .from("leave_applications")
+        .select("leave_plan_id, duration_days, status")
+        .eq("firebase_uid", currentUser.uid)
+        .in("status", ["approved", "pending"]);
+
+      if (error) {
+        console.error("Error fetching leave usage:", error);
+        return;
+      }
+
+      const usage = {};
+      (applications || []).forEach((app) => {
+        usage[app.leave_plan_id] = (usage[app.leave_plan_id] || 0) + app.duration_days;
+      });
+
+      const newBalances = {};
+      leaveOptions.forEach((plan) => {
+        const used = usage[plan.id] || 0;
+        newBalances[plan.id] = Math.max(0, plan.days - used);
+      });
+
+      setLeaveBalances(newBalances);
+    }
+
+    calculateBalances();
+  }, [currentUser, leaveOptions]);
+
   return (
-    <div className="min-h-screen bg-green-50 text-green-900">
-      <header className="bg-white shadow-sm">
+    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white text-green-900">
+      <header className="bg-white/80 backdrop-blur border-b border-yellow-100">
         <nav className="max-w-6xl mx-auto flex justify-between items-center px-4 py-3">
           <ul className="hidden sm:flex space-x-8 text-sm font-medium">
             <li
@@ -233,18 +305,6 @@ export default function DashboardUser() {
             </li>
 
             <li
-              onClick={() => setActiveTab("analytics")}
-              className={`flex items-center gap-2 pb-2 cursor-pointer border-b-2 transition ${
-                activeTab === "analytics"
-                  ? "border-green-600 text-green-700"
-                  : "border-transparent text-gray-400 hover:text-green-600"
-              }`}
-            >
-              <BarChart3 size={18} />
-              <span>Analytics</span>
-            </li>
-
-            <li
               onClick={() => setFaqOpen(true)}
               className="flex items-center gap-2 pb-2 cursor-pointer border-b-2 transition border-transparent text-gray-400 hover:text-green-600"
             >
@@ -268,117 +328,108 @@ export default function DashboardUser() {
       <main className="max-w-6xl mx-auto px-2 sm:px-4 md:px-6 py-4 sm:py-8">
         {activeTab === "dashboard" && (
           <>
-            <div className="bg-green-700 text-white rounded-2xl p-5 sm:p-6 lg:p-7 flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg">
-              <div className="flex flex-col items-center sm:items-start">
-                <h2 className="text-lg sm:text-2xl font-bold">{profile.name}</h2>
-                <p className="text-yellow-200">{profile.role}</p>
+            {/* HERO */}
+            <div className="rounded-2xl border border-yellow-200 bg-gradient-to-r from-green-800 to-green-700 p-5 sm:p-7 text-white shadow-lg">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+                    Welcome, {profile.name}
+                  </h2>
+                  <p className="text-sm text-yellow-100">
+                    {profile.role} • {profile.department}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border ${
+                      hasClockedInToday
+                        ? "bg-green-200/20 text-green-100 border-green-200/30"
+                        : "bg-yellow-200/20 text-yellow-100 border-yellow-200/30"
+                    }`}
+                  >
+                    {hasClockedInToday ? "Clocked In Today" : "Not Clocked In Today"}
+                  </span>
+
+                  <button
+                    onClick={() => setFaqOpen(true)}
+                    className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20 transition cursor-pointer"
+                  >
+                    Help
+                  </button>
+                </div>
               </div>
+
+              {attendanceMessage && (
+                <p className="mt-3 text-sm text-yellow-100">{attendanceMessage}</p>
+              )}
             </div>
 
-            <div className="mt-6 flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4">
+            {/* QUICK ACTIONS */}
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {quickActions.map((action) => {
-                const isClockIn = action.type === "in";
-                const isClockOut = action.type === "out";
-
-                const baseClasses =
-                  "shadow px-6 py-2 rounded-lg font-semibold border-none cursor-pointer w-full sm:w-auto sm:min-w-[180px] transition";
-
-                const inactiveClockIn =
-                  "bg-yellow-400 text-green-900 hover:bg-yellow-300 hover:scale-105";
-                const inactiveClockOut =
-                  "bg-yellow-400 text-green-900 hover:bg-red-500 hover:text-white hover:scale-105";
-                const inactiveDefault =
-                  "bg-yellow-400 text-green-900 hover:bg-yellow-300 hover:scale-105";
-
-                const activeClock =
-                  "bg-blue-500 text-white hover:bg-blue-600 hover:scale-105";
-
-                let colorClasses = inactiveDefault;
-                if (isClockIn) colorClasses = inactiveClockIn;
-                else if (isClockOut) colorClasses = inactiveClockOut;
-
-                if ((isClockIn && isClockedIn) || (isClockOut && !isClockedIn)) {
-                  colorClasses = activeClock;
-                }
-
-                const onClick = action.type ? () => handleClock(action.type) : action.onClick;
-
-                // ✅ disable rules for Clock In/Out
-                const disabled =
-                  clockLoading ||
-                  (isClockIn && isClockedIn) ||
-                  (isClockOut && !isClockedIn);
+                const disabled = clockLoading || (action.isClockAction && hasClockedInToday);
 
                 return (
                   <button
                     key={action.label}
-                    className={`${baseClasses} ${colorClasses} ${
-                      disabled ? "opacity-60 cursor-not-allowed hover:scale-100" : ""
-                    }`}
-                    onClick={onClick}
+                    onClick={action.onClick}
                     disabled={disabled}
+                    className={`rounded-xl px-4 py-3 text-sm font-bold shadow-sm border transition cursor-pointer ${
+                      disabled
+                        ? "bg-gray-200 text-gray-500 border-gray-200 cursor-not-allowed"
+                        : "bg-yellow-400 text-green-950 border-yellow-300 hover:bg-yellow-300"
+                    }`}
                   >
-                    {clockLoading && action.type ? "Processing..." : action.label}
+                    {clockLoading && action.isClockAction ? "Processing..." : action.label}
                   </button>
                 );
               })}
             </div>
 
-            {attendanceMessage && (
-              <p className="mt-2 text-sm text-green-800">{attendanceMessage}</p>
-            )}
-
-            <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <div className="bg-green-700 p-4 rounded-xl shadow-lg text-white">
-                <h3 className="font-bold mb-3 text-yellow-300">Available Leave Days</h3>
-                <div className="space-y-3">
-                  <ProgressBar label="Annual Leave" value="10 of 20 days" percent={50} />
-                  <ProgressBar label="Sick Leave" value="6 of 10 days" percent={60} />
-                  <ProgressBar
-                    label="Compassionate Leave"
-                    value="8 of 10 days"
-                    percent={80}
-                  />
+            {/* CARDS GRID */}
+            <div className="mt-7 flex justify-center">
+              {/* LEAVE BALANCE CARD */}
+              <div className="w-full max-w-xxl rounded-2xl border border-yellow-200 bg-white shadow-sm overflow-hidden">
+                <div className="bg-green-800 px-4 py-3">
+                  <h3 className="font-bold text-yellow-300">Available Leave Days</h3>
+                  <p className="text-xs text-yellow-100">
+                    Balances include pending + approved requests.
+                  </p>
                 </div>
-              </div>
 
-              <div className="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-xl shadow text-green-900">
-                <h3 className="font-semibold mb-3 text-green-800">To-dos</h3>
-                <ul className="space-y-2 text-sm">
-                  {[
-                    "Complete Onboarding Document Upload",
-                    "Follow up on client documents",
-                    "Design creative assets",
-                    "Schedule weekly call for HR project",
-                    "Follow up on client documents",
-                  ].map((task, i) => (
-                    <li key={i} className="p-2 bg-white rounded-md border border-yellow-100">
-                      {task}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                <div className="p-4">
+                  {loadingLeaves ? (
+                    <p className="text-sm text-green-700">Loading leave plans...</p>
+                  ) : leaveOptions.length === 0 ? (
+                    <p className="text-sm text-red-600">
+                      No leave plans available. Please contact your administrator.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {leaveOptions.map((plan) => {
+                        const remaining = leaveBalances[plan.id] ?? plan.days;
+                        const used = plan.days - remaining;
+                        const percent = plan.days > 0 ? (used / plan.days) * 100 : 0;
 
-              <div className="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-xl shadow text-green-900">
-                <h3 className="font-semibold mb-3 text-green-800">Announcement(s)</h3>
-                <ul className="space-y-2 text-sm">
-                  {[
-                    "Welcome message – new team member joining soon!",
-                    "Sandwich Project Manager kickoff at the meeting hall",
-                    "Office Space Update",
-                  ].map((note, i) => (
-                    <li key={i} className="p-2 bg-white rounded-md border border-yellow-100">
-                      {note}
-                    </li>
-                  ))}
-                </ul>
+                        return (
+                          <ProgressBar
+                            key={plan.id}
+                            label={plan.label}
+                            value={`${remaining} of ${plan.days} days`}
+                            percent={percent}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </>
         )}
 
-        {activeTab === "payroll" && <PayrollHistory />}
-        {activeTab === "analytics" && <PayrollAnalytics />}
+        {activeTab === "payroll" && <PayrollHistory employeeId={employeeId} />}
       </main>
 
       {profileModalOpen && (
@@ -394,8 +445,100 @@ export default function DashboardUser() {
   );
 }
 
-/* ===== PAYROLL HISTORY ===== */
-function PayrollHistory() {
+/* ===== PAYROLL HISTORY WITH VIEW & DOWNLOAD ===== */
+function PayrollHistory({ employeeId }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [errMsg, setErrMsg] = useState("");
+  const [viewingPayslip, setViewingPayslip] = useState(null);
+
+  const peso = (n) =>
+    Number.isFinite(n)
+      ? Number(n).toLocaleString("en-PH", { style: "currency", currency: "PHP" })
+      : "₱0.00";
+
+  const formatDate = (iso) => {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleDateString("en-PH");
+    } catch {
+      return "—";
+    }
+  };
+
+  const formatPeriod = (start, end) => {
+    if (!start && !end) return "—";
+    if (start && end) return `${start} to ${end}`;
+    return start || end;
+  };
+
+  useEffect(() => {
+    const loadPayroll = async () => {
+      if (!employeeId) return;
+
+      setLoading(true);
+      setErrMsg("");
+
+      const { data, error } = await supabase
+        .from("payroll_records")
+        .select("*")
+        .eq("employee_id", employeeId)
+        .order("period_end", { ascending: false })
+        .limit(24);
+
+      if (error) {
+        console.error("Load payroll_records error:", error);
+        setErrMsg(error.message || "Failed to load payroll history.");
+        setRows([]);
+      } else {
+        setRows(data || []);
+      }
+
+      setLoading(false);
+    };
+
+    loadPayroll();
+  }, [employeeId]);
+
+  const stats = useMemo(() => {
+    const amounts = (rows || []).map((r) => Number(r.gross_pay) || 0);
+    const total = amounts.reduce((a, b) => a + b, 0);
+    const avg = amounts.length ? total / amounts.length : 0;
+    const highest = amounts.length ? Math.max(...amounts) : 0;
+    const lowest = amounts.length ? Math.min(...amounts) : 0;
+    return { total, avg, highest, lowest };
+  }, [rows]);
+
+  // Handle PDF Download
+  const handleDownload = (record) => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("PAYSLIP", 105, 20, { align: "center" });
+
+    doc.setFontSize(10);
+    doc.text(`Period: ${formatPeriod(record.period_start, record.period_end)}`, 14, 30);
+    doc.text(`Date Paid: ${formatDate(record.paid_at)}`, 14, 35);
+    doc.text(`Status: ${record.status}`, 14, 40);
+
+    autoTable(doc, {
+      startY: 50,
+      head: [["Description", "Amount"]],
+      body: [
+        ["Gross Pay", peso(Number(record.gross_pay))],
+        ["Deductions", `(${peso(Number(record.deductions))})`],
+        [
+          { content: "NET PAY", styles: { fontStyle: "bold" } },
+          { content: peso(Number(record.net_pay)), styles: { fontStyle: "bold" } },
+        ],
+      ],
+      theme: "grid",
+      headStyles: { fillColor: [21, 128, 61] },
+    });
+
+    doc.text("This is a system-generated payslip.", 105, doc.lastAutoTable.finalY + 20, { align: "center" });
+    doc.save(`Payslip_${record.period_end}.pdf`);
+  };
+
   return (
     <section className="bg-[#f7f4e8] rounded-2xl p-6 shadow space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -405,41 +548,149 @@ function PayrollHistory() {
             View your payment records and download payslips.
           </p>
         </div>
-        <button className="self-start md:self-auto text-xs border rounded-md px-3 py-2 bg-white hover:bg-gray-50">
-          Last 6 Months
-        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <SummaryCard label="Total Paid" value="₱312,500" />
-        <SummaryCard label="Average Pay" value="₱52,083" />
-        <SummaryCard label="Highest Pay" value="₱57,500" />
-        <SummaryCard label="Lowest Pay" value="₱48,000" />
+        <SummaryCard label="Total Paid" value={peso(stats.total)} />
+        <SummaryCard label="Average Pay" value={peso(stats.avg)} />
+        <SummaryCard label="Highest Pay" value={peso(stats.highest)} />
+        <SummaryCard label="Lowest Pay" value={peso(stats.lowest)} />
       </div>
 
       <div className="bg-white rounded-xl p-4 shadow overflow-x-auto">
-        <table className="w-full text-xs sm:text-sm">
-          <thead className="text-green-800">
-            <tr>
-              <th className="text-left py-2">Period</th>
-              <th className="text-left py-2">Total Earnings</th>
-              <th className="text-left py-2">Deductions</th>
-              <th className="text-left py-2">Net Pay</th>
-              <th className="text-left py-2">Status</th>
-              <th className="text-left py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y text-gray-700">
-            <PayrollRow period="December 2024" paidDate="12/1/2024" earnings="68,000" deductions="14,000" netPay="54,000" />
-            <PayrollRow period="November 2024" paidDate="11/1/2024" earnings="62,000" deductions="14,000" netPay="48,000" />
-            <PayrollRow period="October 2024" paidDate="10/1/2024" earnings="71,500" deductions="14,000" netPay="57,500" />
-            <PayrollRow period="September 2024" paidDate="9/1/2024" earnings="64,000" deductions="14,000" netPay="50,000" />
-            <PayrollRow period="August 2024" paidDate="8/1/2024" earnings="67,500" deductions="14,000" netPay="53,500" />
-            <PayrollRow period="July 2024" paidDate="7/1/2024" earnings="63,500" deductions="14,000" netPay="49,500" />
-          </tbody>
-        </table>
+        {errMsg && <p className="text-sm text-red-600 mb-3">{errMsg}</p>}
+
+        {loading ? (
+          <p className="text-sm text-gray-600">Loading payroll records...</p>
+        ) : (
+          <table className="w-full text-xs sm:text-sm">
+            <thead className="text-green-800">
+              <tr>
+                <th className="text-left py-2">Period</th>
+                <th className="text-left py-2">Total Earnings</th>
+                <th className="text-left py-2">Status</th>
+                <th className="text-left py-2">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody className="divide-y text-gray-700">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-3 text-gray-600">
+                    No payroll records yet.
+                  </td>
+                </tr>
+              ) : (
+                rows.map((r) => (
+                  <PayrollRow
+                    key={r.id}
+                    period={formatPeriod(r.period_start, r.period_end)}
+                    paidDate={formatDate(r.paid_at)}
+                    earnings={peso(Number(r.gross_pay) || 0)}
+                    status={r.status || "Paid"}
+                    onView={() => setViewingPayslip(r)}
+                    onDownload={() => handleDownload(r)}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {viewingPayslip && (
+        <PayslipViewModal
+          record={viewingPayslip}
+          onClose={() => setViewingPayslip(null)}
+          peso={peso}
+          period={formatPeriod(viewingPayslip.period_start, viewingPayslip.period_end)}
+        />
+      )}
     </section>
+  );
+}
+
+function PayrollRow({ period, paidDate, earnings, status, onView, onDownload }) {
+  return (
+    <tr>
+      <td className="py-2">
+        <div className="font-medium">{period}</div>
+        <div className="text-[11px] text-gray-500">Paid: {paidDate}</div>
+      </td>
+
+      <td className="font-semibold text-green-800">{earnings}</td>
+
+      <td>
+        <span className="inline-block px-3 py-1 text-xs rounded-full bg-green-100 text-green-700">
+          {status}
+        </span>
+      </td>
+
+      <td className="flex items-center gap-2 py-2 text-gray-500">
+        <button
+          onClick={onView}
+          className="p-1.5 hover:bg-green-50 rounded-full hover:text-green-700 transition"
+          title="View Details"
+        >
+          <Eye size={16} />
+        </button>
+        <button
+          onClick={onDownload}
+          className="p-1.5 hover:bg-green-50 rounded-full hover:text-green-700 transition"
+          title="Download PDF"
+        >
+          <Download size={16} />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+/* ===== PAYSLIP MODAL ===== */
+function PayslipViewModal({ record, onClose, peso, period }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-yellow-200">
+        <div className="bg-green-700 p-4 flex justify-between items-center">
+          <h3 className="text-white font-bold text-lg">Payslip Details</h3>
+          <button onClick={onClose} className="text-white/80 hover:text-white transition">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div className="text-center border-b border-gray-100 pb-4">
+            <p className="text-sm text-gray-500 uppercase tracking-wide">Pay Period</p>
+            <p className="text-green-900 font-bold text-lg">{period}</p>
+          </div>
+
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-600">Gross Pay</span>
+              <span className="font-medium text-gray-900">{peso(record.gross_pay)}</span>
+            </div>
+            <div className="flex justify-between text-red-600">
+              <span>Deductions</span>
+              <span>- {peso(record.deductions)}</span>
+            </div>
+            <div className="h-px bg-gray-200 my-2"></div>
+            <div className="flex justify-between text-lg font-bold text-green-800">
+              <span>Net Pay</span>
+              <span>{peso(record.net_pay)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-50 p-4 text-center">
+          <button
+            onClick={onClose}
+            className="text-sm text-gray-500 hover:text-green-700 font-medium transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -452,105 +703,20 @@ function SummaryCard({ label, value }) {
   );
 }
 
-function PayrollRow({ period, paidDate, earnings, deductions, netPay }) {
-  return (
-    <tr>
-      <td className="py-2">
-        <div className="font-medium">{period}</div>
-        <div className="text-[11px] text-gray-500">Paid: {paidDate}</div>
-      </td>
-      <td>{earnings}</td>
-      <td className="text-red-500">{deductions}</td>
-      <td className="text-green-700">{netPay}</td>
-      <td>
-        <span className="inline-block px-3 py-1 text-xs rounded-full bg-green-100 text-green-700">
-          Paid
-        </span>
-      </td>
-      <td className="space-x-3 text-gray-500">
-        <button className="hover:text-green-700">View</button>
-        <button className="hover:text-green-700">Download</button>
-      </td>
-    </tr>
-  );
-}
-
-/* ===== PAYROLL ANALYTICS ===== */
-function PayrollAnalytics() {
-  return (
-    <section className="bg-[#f7f4e8] rounded-2xl p-6 shadow space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-green-800">Payroll Analytics</h2>
-          <p className="text-sm text-gray-600">Insights and trends for your earnings</p>
-        </div>
-        <button className="self-start md:self-auto text-xs border rounded-md px-3 py-2 bg-white hover:bg-gray-50">
-          Last 6 Months
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <SummaryCard label="Total Earnings" value="₱396,500" />
-        <SummaryCard label="Total Deductions" value="₱84,000" />
-        <SummaryCard label="Avg Monthly Pay" value="₱52,083" />
-        <SummaryCard label="Month over Month" value="+12.5%" />
-      </div>
-
-      <div className="bg-white rounded-xl p-4 shadow">
-        <h3 className="text-sm font-semibold text-green-800 mb-4">Monthly Earnings Trend</h3>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-            <YAxis
-              tick={{ fontSize: 12 }}
-              tickFormatter={(value) => value.toLocaleString()}
-              domain={[0, 80000]}
-            />
-            <Tooltip formatter={(value) => value.toLocaleString()} />
-            <Legend />
-            <Line type="monotone" dataKey="earnings" name="Total Earnings" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} />
-            <Line type="monotone" dataKey="netPay" name="Net Pay" stroke="#eab308" strokeWidth={2} dot={{ r: 4 }} />
-            <Line type="monotone" dataKey="deductions" name="Deductions" stroke="#f87171" strokeWidth={2} dot={{ r: 4 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl p-4 shadow">
-          <h3 className="text-sm font-semibold text-green-800 mb-4">Earnings vs Deductions</h3>
-          <div className="h-40 flex items-center justify-center border border-dashed border-gray-300 rounded-lg text-gray-400 text-sm">
-            Chart placeholder
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 shadow">
-          <h3 className="text-sm font-semibold text-green-800 mb-4">Net Pay Trend</h3>
-          <div className="h-40 flex items-center justify-center border border-dashed border-gray-300 rounded-lg text-gray-400 text-sm">
-            Chart placeholder
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ===== PROGRESS BAR ===== */
 function ProgressBar({ label, value, percent }) {
   return (
     <div>
       <div className="flex justify-between text-sm mb-1">
-        <span>{label}</span>
-        <span className="text-yellow-100">{value}</span>
+        <span className="text-green-900 font-semibold">{label}</span>
+        <span className="text-green-700">{value}</span>
       </div>
-      <div className="w-full bg-yellow-200 rounded-full h-2">
-        <div className="bg-yellow-400 h-2 rounded-full" style={{ width: `${percent}%` }} />
+      <div className="w-full bg-yellow-100 rounded-full h-2">
+        <div className="bg-green-700 h-2 rounded-full" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
 }
 
-/* ===== PROFILE MODAL ===== */
 function ProfileModal({ onClose, profile, onChange }) {
   return (
     <div
@@ -569,6 +735,7 @@ function ProfileModal({ onClose, profile, onChange }) {
         </button>
 
         <form className="space-y-4">
+          {/* Profile Fields... */}
           <div>
             <label className="block mb-1 text-sm font-semibold">Full Name</label>
             <input
@@ -578,7 +745,6 @@ function ProfileModal({ onClose, profile, onChange }) {
               className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
             />
           </div>
-
           <div>
             <label className="block mb-1 text-sm font-semibold">Email</label>
             <input
@@ -588,7 +754,6 @@ function ProfileModal({ onClose, profile, onChange }) {
               className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
             />
           </div>
-
           <div>
             <label className="block mb-1 text-sm font-semibold">Department</label>
             <input
@@ -598,7 +763,6 @@ function ProfileModal({ onClose, profile, onChange }) {
               className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
             />
           </div>
-
           <div>
             <label className="block mb-1 text-sm font-semibold">Role/Position</label>
             <input
@@ -608,7 +772,6 @@ function ProfileModal({ onClose, profile, onChange }) {
               className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
             />
           </div>
-
           <div>
             <label className="block mb-1 text-sm font-semibold">Contact</label>
             <input
@@ -618,7 +781,6 @@ function ProfileModal({ onClose, profile, onChange }) {
               className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
             />
           </div>
-
           <div>
             <label className="block mb-1 text-sm font-semibold">Address</label>
             <input

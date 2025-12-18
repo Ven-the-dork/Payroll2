@@ -253,17 +253,21 @@ export default function EmployeeManagement() {
       const firebaseUser = cred.user;
 
       const { error } = await supabase.from("employees").insert({
-        firebase_uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        full_name: name,
-        department,
-        position,
-        start_date: startDate,
-        category,
-        gender,
-        status: "Active",
-        role,
-      });
+      firebase_uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      full_name: name,
+      department,
+      position,
+      start_date: startDate,
+      category,
+      gender,
+      status: "Active",
+      role,
+
+      // ✅ auto-set same Clockify ID for every new employee
+      clockify_user_id: "69399acc2d8d3a36ae5cfa9b",
+    });
+
 
       if (error) {
         console.error("SUPABASE ERROR:", error.message, error.details, error.hint);
@@ -573,7 +577,7 @@ export default function EmployeeManagement() {
                           />
                         </label>
                         <label className="text-sm space-y-1">
-                          <span>Position</span>
+                          <span>Teaching Position</span>
                           <input
                             type="text"
                             name="position"
@@ -689,7 +693,7 @@ export default function EmployeeManagement() {
                     <tr className="text-xs sm:text-sm font-semibold uppercase tracking-wide">
                       <th className="p-4 text-left">Employee</th>
                       <th className="p-4 text-left">Department</th>
-                      <th className="p-4 text-left">Position</th>
+                      <th className="p-4 text-left">Teaching Position</th>
                       <th className="p-4 text-left">Start Date</th>
                       <th className="p-4 text-left">Category</th>
                       <th className="p-4 text-left">Gender</th>
@@ -927,7 +931,7 @@ function EmployeeProfileModal({ employee, onClose }) {
                 <div className="grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
                   <div>
                     <span className="block text-[10px] text-gray-400 uppercase font-bold tracking-wider">
-                      Position
+                      Teaching Position
                     </span>
                     <span className="text-gray-800 font-medium truncate block">
                       {position || "N/A"}

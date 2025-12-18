@@ -1,13 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  Users,
-  CalendarDays,
-  Menu,
-  Search,
-  Settings,
-  Clock,
-  Download,
-} from "lucide-react";
+import { Users, CalendarDays, Menu, Search, Settings, Clock, Download } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
@@ -18,23 +10,62 @@ import AdminSidebar from "../components/Adminnavbar/Timetrackdashvar";
 import FontSizeMenu from "../components/hooks/FontSizeMenu";
 import AdminSetting from "../components/Adminsetting";
 
+// --- StatCard ---
+function StatCard({ icon: Icon, color, value, label, isAbsent }) {
+  const colorClasses = {
+    green: "text-green-600 border-green-600",
+    yellow: "text-yellow-500 border-yellow-400",
+    purple: "text-purple-500 border-purple-500",
+    red: "text-red-500 border-red-500",
+  };
+
+  const activeColorClass = colorClasses[color] || colorClasses.green;
+  const iconColorClass = activeColorClass.split(" ")[0];
+
+  return (
+    <div
+      className={`bg-white p-4 rounded-lg border shadow-sm flex flex-col justify-between h-28 relative ${activeColorClass}`}
+    >
+      <div className="flex justify-between items-start">
+        <div className={iconColorClass}>
+          <Icon size={24} />
+          {isAbsent && (
+            <div className="absolute top-4 left-9 text-xs font-bold">x</div>
+          )}
+        </div>
+        <span className={`text-3xl font-bold ${iconColorClass}`}>{value}</span>
+      </div>
+      <p className="text-sm text-gray-600">{label}</p>
+    </div>
+  );
+}
+
 export default function TimeTracking() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Attendance data from Supabase
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Present / Late / Absent stats
-  const [stats, setStats] = useState({ present: 0, late: 0, absent: 0 });
+  // Filters
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
+  const [selectedDepartment, setSelectedDepartment] = useState("All");
+  const [selectedStatus, setSelectedStatus] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // --- Config ---
-  const TZ = "Asia/Singapore"; // Singapore Standard Time
-  const SHIFT_START_HOUR = 8; // attendance window cutoff (info text only)
-  const LATE_HOUR = 9; // 9:00 AM => Late (1 hour after 8AM)
-  const REQUIRED_HOURS = 8; // ✅ must be >= 8 hours to count as Present/Late
+  const [stats, setStats] = useState({
+    present: 0,
+    late: 0,
+    absent: 0,
+    onLeave: 0,
+  });
+
+  // Config
+  const TZ = "Asia/Singapore";
+  const LATE_HOUR = 9; // late if > 09:00 SGT
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -42,7 +73,6 @@ export default function TimeTracking() {
     navigate("/", { replace: true });
   };
 
-  // Load user from session
   useEffect(() => {
     const stored = sessionStorage.getItem("user");
     if (stored) {
@@ -54,144 +84,142 @@ export default function TimeTracking() {
     }
   }, []);
 
-  // Helpers to interpret timestamps in Singapore time (for Late logic + today's stats)
-  const toSgParts = (date) => {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: TZ,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(date);
-
-    const map = {};
-    for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
-
-    return {
-      year: Number(map.year),
-      month: Number(map.month),
-      day: Number(map.day),
-      hour: Number(map.hour),
-      minute: Number(map.minute),
-    };
-  };
-
-  const isLateSg = (clockInIso) => {
-    const p = toSgParts(new Date(clockInIso));
-    // Late if >= 09:00 SGT
-    return p.hour > LATE_HOUR || (p.hour === LATE_HOUR && p.minute >= 0);
-  };
-
-  // Fetch attendance logs + employees from Supabase
   useEffect(() => {
-   // inside TimeTracking.jsx
-
     const fetchAttendance = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("attendance_logs")
-        .select(
-          `id, clock_in_at, clock_out_at, employee:employees!attendance_logs_employee_id_fkey (full_name, department)`
-        )
-        .order("clock_in_at", { ascending: false });
 
-      if (error) {
-        console.error("ATTENDANCE_ERROR", error);
-        setAttendanceData([]);
-        setStats({ present: 0, late: 0, absent: 0 });
-        setLoading(false);
-        return;
-      }
+      try {
+        // 1) Employees
+        const { data: employees, error: empError } = await supabase
+          .from("employees")
+          .select("id, full_name, department, role")
+          .eq("status", "Active")
+          .neq("role", "admin");
 
-      // 1. Map data for the table
-      const mapped = data.map((row) => {
-        const start = row.clock_in_at ? new Date(row.clock_in_at) : null;
-        const end = row.clock_out_at ? new Date(row.clock_out_at) : null;
+        if (empError) throw empError;
 
-        let duration = "-";
-        if (start && end) {
-          const diffMs = end.getTime() - start.getTime();
-          const hours = diffMs / (1000 * 60 * 60);
-          duration = `${hours.toFixed(2)} h`;
-        }
+        // 2) Clock-in logs for the selected shift_date (clock-in only)
+        const { data: logs, error: logError } = await supabase
+          .from("attendance_logs")
+          .select("employee_id, clock_in_at, shift_date, notes")
+          .eq("shift_date", selectedDate);
 
-        // --- STATUS LOGIC ---
-        let status = "Absent"; // Default if no start time
-        
-        if (start) {
-          const startHour = start.getHours(); // Local browser time (e.g., SG time)
-          
-          // If clocked in at 12 PM or later -> Absent
-          if (startHour >= 12) {
-            status = "Absent";
-          } else if (end) {
-            status = "Present";
+        if (logError) throw logError;
+
+        // 3) Approved leaves overlapping selectedDate
+        const { data: leaves, error: leaveError } = await supabase
+          .from("leave_applications")
+          .select("employee_id, start_date, end_date, status")
+          .eq("status", "approved")
+          .lte("start_date", selectedDate)
+          .gte("end_date", selectedDate);
+
+        if (leaveError) throw leaveError;
+
+        // 4) Merge + stats
+        let presentCount = 0;
+        let lateCount = 0;
+        let absentCount = 0;
+        let onLeaveCount = 0;
+
+        const merged = employees.map((emp) => {
+          const leave = leaves.find((l) => l.employee_id === emp.id);
+          const log = logs.find((l) => l.employee_id === emp.id);
+
+          let status = "Absent";
+          let clockIn = "-";
+
+          if (leave) {
+            status = "On Leave";
+            clockIn = "On Leave";
+            onLeaveCount++;
+          } else if (log?.clock_in_at) {
+            const start = new Date(log.clock_in_at);
+
+            clockIn = start.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+              timeZone: TZ,
+            });
+
+            const startHour = parseInt(
+              start.toLocaleTimeString("en-US", {
+                hour: "numeric",
+                hour12: false,
+                timeZone: TZ,
+              }),
+              10
+            );
+
+            const startMin = parseInt(
+              start.toLocaleTimeString("en-US", {
+                minute: "2-digit",
+                hour12: false,
+                timeZone: TZ,
+              }),
+              10
+            );
+
+            const isLate = startHour > LATE_HOUR || (startHour === LATE_HOUR && startMin > 0);
+
+            status = isLate ? "Late" : "Present";
+            if (isLate) lateCount++;
+            else presentCount++;
           } else {
-            status = "In progress";
+            status = "Absent";
+            absentCount++;
           }
-        }
 
-        return {
-          id: row.id,
-          employee: row.employee?.full_name || "Unknown",
-          department: row.employee?.department || "-",
-          date: start ? start.toLocaleDateString() : "-",
-          clockIn: start ? start.toLocaleTimeString() : "-",
-          clockOut: end ? end.toLocaleTimeString() : "-",
-          duration,
-          status, // Use our new status
-        };
-      });
+          return {
+            id: emp.id,
+            employee: emp.full_name ?? "(No name)",
+            department: emp.department ?? "-",
+            date: selectedDate,
+            clockIn,
+            status,
+          };
+        });
 
-      // 2. Compute Stats for TODAY
-      const today = new Date().toLocaleDateString();
-      let present = 0;
-      let late = 0;
-      let absent = 0;
-
-      data.forEach((row) => {
-        if (!row.clock_in_at) return;
-        const start = new Date(row.clock_in_at);
-
-        // Only calculate stats for today's logs
-        if (start.toLocaleDateString() !== today) return;
-
-        const startHour = start.getHours();
-
-        // If clocked in at 12:00 PM or later -> Count as ABSENT
-        if (startHour >= 12) {
-          absent++;
-        } else {
-          // Otherwise, they are Present
-          present++;
-
-          // Check Late condition (after 8:00 AM)
-          if (startHour > 8 || (startHour === 8 && start.getMinutes() > 0)) {
-            late++;
-          }
-        }
-      });
-
-      setAttendanceData(mapped);
-      setStats({ present, late, absent });
-      setLoading(false);
+        setAttendanceData(merged);
+        setStats({
+          present: presentCount,
+          late: lateCount,
+          absent: absentCount,
+          onLeave: onLeaveCount,
+        });
+      } catch (error) {
+        console.error("ATTENDANCE_FETCH_ERROR", error);
+        setAttendanceData([]);
+        setStats({ present: 0, late: 0, absent: 0, onLeave: 0 });
+      } finally {
+        setLoading(false);
+      }
     };
 
-
     fetchAttendance();
-  }, []);
+  }, [selectedDate]);
+
+  const filteredData = attendanceData.filter((row) => {
+    if (selectedDepartment !== "All" && row.department !== selectedDepartment) return false;
+    if (selectedStatus !== "All" && row.status !== selectedStatus) return false;
+
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      const nameMatch = (row.employee || "").toLowerCase().includes(lower);
+      const deptMatch = (row.department || "").toLowerCase().includes(lower);
+      if (!nameMatch && !deptMatch) return false;
+    }
+    return true;
+  });
 
   const sidebarWidth = isOpen ? "lg:w-64" : "lg:w-20";
-  const hideWhenCollapsed = !isOpen && "hidden lg:block";
 
-  // status badge colors
   const statusBadgeClass = (status) => {
     if (status === "Late") return "bg-yellow-100 text-yellow-700";
     if (status === "Present") return "bg-green-100 text-green-700";
-    if (status === "Undertime") return "bg-red-100 text-red-700";
-    if (status === "In progress") return "bg-blue-100 text-blue-700";
+    if (status === "On Leave") return "bg-purple-100 text-purple-700";
+    if (status === "Absent") return "bg-red-100 text-red-700";
     return "bg-gray-100 text-gray-700";
   };
 
@@ -204,8 +232,9 @@ export default function TimeTracking() {
         onNavigate={(path) => navigate(path)}
       />
 
-      {/* Main Content */}
-      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-[#FDFBF6]">
+      <main
+        className={`flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-[#FDFBF6] ${sidebarWidth}`}
+      >
         {/* Top bar */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
           <button
@@ -215,22 +244,6 @@ export default function TimeTracking() {
             <Menu size={28} />
           </button>
 
-          {/* Search */}
-          <div className="flex-1 flex flex-col items-center">
-            <div className="w-full md:max-w-md relative">
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full rounded-full border border-gray-300 px-4 pr-10 py-2 text-sm md:text-base text-gray-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-green-600"
-              />
-              <Search
-                size={18}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-yellow-400 cursor-pointer"
-              />
-            </div>
-          </div>
-
-          {/* Right icons */}
           <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">
             <AdminBell />
             <AdminSetting
@@ -244,164 +257,69 @@ export default function TimeTracking() {
                 </button>
               }
             >
-              {({ close }) => <FontSizeMenu closeMenu={close} />}
+              <FontSizeMenu />
             </AdminSetting>
           </div>
         </div>
 
-        {/* Page Title & Subtitle */}
+        {/* Title */}
         <div className="mb-6">
-          <h1 className="text-2xl md:text-3xl font-bold text-green-800">
-            Time Tracking
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Monitor employee attendance and working hours (SGT)
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            Shift window resets at {SHIFT_START_HOUR}:00; Late if {LATE_HOUR}:00
-            or later; Present/Late only if duration ≥ {REQUIRED_HOURS} hours.
-          </p>
+          <h1 className="text-2xl md:text-3xl font-bold text-green-800">Time Tracking</h1>
+          <p className="text-sm text-gray-500 mt-1">Clock-in based attendance (SGT)</p>
+          <p className="text-xs text-gray-400 mt-1">Late if after {LATE_HOUR}:00 (SGT).</p>
         </div>
 
-        {/* Status Cards */}
+        {/* Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          {/* Present */}
-          <div className="bg-white p-4 rounded-lg border border-green-600 shadow-sm flex flex-col justify-between h-28 relative">
-            <div className="flex justify-between items-start">
-              <div className="text-green-600">
-                <Users size={24} />
-              </div>
-              <span className="text-3xl font-bold text-gray-700">
-                {stats.present}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">Present</p>
-          </div>
-
-          {/* Late Arrivals */}
-          <div className="bg-white p-4 rounded-lg border border-yellow-400 shadow-sm flex flex-col justify-between h-28 relative">
-            <div className="flex justify-between items-start">
-              <div className="text-yellow-500">
-                <Clock size={24} />
-              </div>
-              <span className="text-3xl font-bold text-yellow-500">
-                {stats.late}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">Late Arrivals</p>
-          </div>
-
-          {/* Absent */}
-          <div className="bg-white p-4 rounded-lg border border-red-500 shadow-sm flex flex-col justify-between h-28 relative">
-            <div className="flex justify-between items-start">
-              <div className="text-red-500 relative">
-                <Users size={24} />
-                <div className="absolute top-0 left-5 text-red-500 font-bold text-xs">
-                  x
-                </div>
-              </div>
-              <span className="text-3xl font-bold text-red-500">
-                {stats.absent}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">Absent</p>
-          </div>
-
-          {/* Attendance Rate */}
-          <div className="bg-white p-4 rounded-lg border border-green-800 shadow-sm flex flex-col justify-between h-28 relative">
-            <div className="flex justify-between items-start">
-              <div className="text-green-800">
-                <svg
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                  <polyline points="17 6 23 6 23 12"></polyline>
-                </svg>
-              </div>
-              <span className="text-3xl font-bold text-green-800">
-                {stats.present + stats.late + stats.absent === 0
-                  ? "0.0%"
-                  : `${(
-                      (stats.present /
-                        (stats.present + stats.late + stats.absent)) *
-                      100
-                    ).toFixed(1)}%`}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600">Attendance Rate</p>
-          </div>
+          <StatCard icon={Users} color="green" value={stats.present} label="Present" />
+          <StatCard icon={Clock} color="yellow" value={stats.late} label="Late Arrivals" />
+          <StatCard icon={CalendarDays} color="purple" value={stats.onLeave} label="On Leave" />
+          <StatCard icon={Users} color="red" value={stats.absent} label="Absent" isAbsent />
         </div>
 
-        {/* Filter Section (UI only for now) */}
+        {/* Filters */}
         <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-            {/* Date Filter */}
             <div className="flex flex-col gap-1">
               <label className="text-xs text-gray-500 flex items-center gap-1">
                 <CalendarDays size={12} /> Date
               </label>
               <input
                 type="date"
-                defaultValue="2025-12-12"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
                 className="border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-600 w-full"
               />
             </div>
 
-            {/* Department Filter */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-gray-500 flex items-center gap-1">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                </svg>{" "}
-                Department
-              </label>
-              <select className="border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-600 w-full bg-white">
-                <option>All</option>
-                <option>IT</option>
-                <option>HR</option>
+              <label className="text-xs text-gray-500">Department</label>
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-600 w-full bg-white"
+              >
+                <option value="All">All</option>
+                <option value="IT">IT</option>
+                <option value="HR">HR</option>
               </select>
             </div>
 
-            {/* Status Filter */}
             <div className="flex flex-col gap-1">
-              <label className="text-xs text-gray-500 flex items-center gap-1">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                </svg>{" "}
-                Status
-              </label>
-              <select className="border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-600 w-full bg-white">
-                <option>All</option>
-                <option>Present</option>
-                <option>Late</option>
-                <option>Undertime</option>
-                <option>In progress</option>
-                <option>Absent</option>
+              <label className="text-xs text-gray-500">Status</label>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-600 w-full bg-white"
+              >
+                <option value="All">All</option>
+                <option value="Present">Present</option>
+                <option value="Late">Late</option>
+                <option value="On Leave">On Leave</option>
+                <option value="Absent">Absent</option>
               </select>
             </div>
 
-            {/* Search & Export */}
             <div className="flex gap-2">
               <div className="flex-1">
                 <label className="text-xs text-gray-500 flex items-center gap-1 mb-1">
@@ -410,9 +328,12 @@ export default function TimeTracking() {
                 <input
                   type="text"
                   placeholder="Employee or department..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   className="border border-gray-300 rounded-md p-2 text-sm focus:outline-none focus:ring-1 focus:ring-green-600 w-full"
                 />
               </div>
+
               <div className="flex items-end">
                 <button className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-md text-sm font-semibold flex items-center gap-2 h-10 transition">
                   <Download size={16} /> Export CSV
@@ -422,7 +343,7 @@ export default function TimeTracking() {
           </div>
         </div>
 
-        {/* Table Section */}
+        {/* Table */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
@@ -432,40 +353,37 @@ export default function TimeTracking() {
                   <th className="p-3">Department</th>
                   <th className="p-3">Date</th>
                   <th className="p-3">Clock In</th>
-                  <th className="p-3">Clock Out</th>
-                  <th className="p-3">Duration</th>
                   <th className="p-3">Status</th>
                 </tr>
               </thead>
+
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="7" className="p-8 text-center text-gray-500">
+                    <td colSpan="5" className="p-8 text-center text-gray-500">
                       Loading attendance…
                     </td>
                   </tr>
-                ) : attendanceData.length === 0 ? (
+                ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="p-8 text-center text-gray-500">
+                    <td colSpan="5" className="p-8 text-center text-gray-500">
                       No attendance records found for the selected filters.
                     </td>
                   </tr>
                 ) : (
-                  attendanceData.map((row) => (
+                  filteredData.map((row) => (
                     <tr
                       key={row.id}
                       className="border-b border-gray-100 hover:bg-gray-50"
                     >
-                      <td className="p-3">{row.employee}</td>
-                      <td className="p-3">{row.department}</td>
-                      <td className="p-3">{row.date}</td>
-                      <td className="p-3">{row.clockIn}</td>
-                      <td className="p-3">{row.clockOut}</td>
-                      <td className="p-3">{row.duration}</td>
+                      <td className="p-3 font-medium text-gray-900">{row.employee}</td>
+                      <td className="p-3 text-gray-600">{row.department}</td>
+                      <td className="p-3 text-gray-600">{row.date}</td>
+                      <td className="p-3 text-gray-600">{row.clockIn}</td>
                       <td className="p-3">
                         <span
-                          className={`px-2 py-1 rounded text-xs font-bold ${statusBadgeClass(
-                            row.status,
+                          className={`px-2 py-1 rounded-full text-xs font-bold ${statusBadgeClass(
+                            row.status
                           )}`}
                         >
                           {row.status}
