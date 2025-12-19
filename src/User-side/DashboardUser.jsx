@@ -10,7 +10,7 @@ import autoTable from "jspdf-autotable";
 import UserTopBar from "../components/UserTopBar";
 import { useUserNotifications } from "../components/hooks/useUserNotifications";
 
-import { X, LayoutGrid, Receipt, HelpCircle, Eye, Download } from "lucide-react";
+import { X, LayoutGrid, Receipt, HelpCircle, Eye, Download, User, Calendar, Clock } from "lucide-react";
 
 import FAQModal from "../components/FAQModal";
 
@@ -205,9 +205,9 @@ export default function DashboardUser() {
   };
 
   const quickActions = [
-    { label: "Clock in", onClick: handleClockIn, isClockAction: true },
-    { label: "Apply for Leave", onClick: () => navigate("/applyforleave") },
-    { label: "Update Profile", onClick: () => navigate("/profile") },
+    { label: "Clock in", onClick: handleClockIn, isClockAction: true, icon: <Clock size={20} /> },
+    { label: "Apply for Leave", onClick: () => navigate("/applyforleave"), icon: <Calendar size={20} /> },
+    { label: "Update Profile", onClick: () => navigate("/profile"), icon: <User size={20} /> },
   ];
 
   const handleProfileChange = (e) => {
@@ -276,16 +276,14 @@ export default function DashboardUser() {
   }, [currentUser, leaveOptions]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-green-50 to-white text-green-900">
-      <header className="bg-white/80 backdrop-blur border-b border-yellow-100">
-        <nav className="max-w-6xl mx-auto flex justify-between items-center px-4 py-3">
-          <ul className="hidden sm:flex space-x-8 text-sm font-medium">
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex flex-col">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100 shadow-sm">
+        <nav className="max-w-6xl mx-auto flex justify-between items-center px-6 py-4">
+          <ul className="hidden sm:flex space-x-8 text-sm font-semibold text-gray-500">
             <li
               onClick={() => setActiveTab("dashboard")}
-              className={`flex items-center gap-2 pb-2 cursor-pointer border-b-2 transition ${
-                activeTab === "dashboard"
-                  ? "border-green-600 text-green-700"
-                  : "border-transparent text-gray-400 hover:text-green-600"
+              className={`flex items-center gap-2 cursor-pointer transition-colors ${
+                activeTab === "dashboard" ? "text-green-700" : "hover:text-green-600"
               }`}
             >
               <LayoutGrid size={18} />
@@ -294,10 +292,8 @@ export default function DashboardUser() {
 
             <li
               onClick={() => setActiveTab("payroll")}
-              className={`flex items-center gap-2 pb-2 cursor-pointer border-b-2 transition ${
-                activeTab === "payroll"
-                  ? "border-green-600 text-green-700"
-                  : "border-transparent text-gray-400 hover:text-green-600"
+              className={`flex items-center gap-2 cursor-pointer transition-colors ${
+                activeTab === "payroll" ? "text-green-700" : "hover:text-green-600"
               }`}
             >
               <Receipt size={18} />
@@ -306,7 +302,7 @@ export default function DashboardUser() {
 
             <li
               onClick={() => setFaqOpen(true)}
-              className="flex items-center gap-2 pb-2 cursor-pointer border-b-2 transition border-transparent text-gray-400 hover:text-green-600"
+              className="flex items-center gap-2 cursor-pointer hover:text-green-600 transition-colors"
             >
               <HelpCircle size={18} />
               <span>FAQ</span>
@@ -325,48 +321,53 @@ export default function DashboardUser() {
         </nav>
       </header>
 
-      <main className="max-w-6xl mx-auto px-2 sm:px-4 md:px-6 py-4 sm:py-8">
+      <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-8 w-full">
         {activeTab === "dashboard" && (
-          <>
-            {/* HERO */}
-            <div className="rounded-2xl border border-yellow-200 bg-gradient-to-r from-green-800 to-green-700 p-5 sm:p-7 text-white shadow-lg">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* HERO CARD */}
+            <div className="relative overflow-hidden rounded-3xl bg-green-900 p-8 text-white shadow-xl shadow-green-900/10">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+                  <h2 className="text-3xl font-extrabold tracking-tight">
                     Welcome, {profile.name}
                   </h2>
-                  <p className="text-sm text-yellow-100">
+                  <p className="mt-1 text-green-100 font-medium opacity-90">
                     {profile.role} • {profile.department}
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-3">
                   <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold border ${
+                    className={`inline-flex items-center rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider shadow-sm border ${
                       hasClockedInToday
-                        ? "bg-green-200/20 text-green-100 border-green-200/30"
-                        : "bg-yellow-200/20 text-yellow-100 border-yellow-200/30"
+                        ? "bg-green-500 text-white border-green-400"
+                        : "bg-white/10 text-white border-white/20 backdrop-blur-md"
                     }`}
                   >
-                    {hasClockedInToday ? "Clocked In Today" : "Not Clocked In Today"}
+                    {hasClockedInToday ? "Clocked In" : "Not Clocked In Today"}
                   </span>
 
                   <button
                     onClick={() => setFaqOpen(true)}
-                    className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white hover:bg-white/20 transition cursor-pointer"
+                    className="rounded-full bg-white/10 hover:bg-white/20 px-4 py-1.5 text-xs font-bold text-white transition border border-white/10"
                   >
-                    Help
+                    Help Center
                   </button>
                 </div>
               </div>
 
               {attendanceMessage && (
-                <p className="mt-3 text-sm text-yellow-100">{attendanceMessage}</p>
+                <div className="mt-6 inline-block rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-yellow-200 border border-white/10 backdrop-blur-sm">
+                   {attendanceMessage}
+                </div>
               )}
+              
+              {/* Decorative circle */}
+              <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-green-800/50 blur-3xl pointer-events-none"></div>
             </div>
 
-            {/* QUICK ACTIONS */}
-            <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* QUICK ACTIONS ROW */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {quickActions.map((action) => {
                 const disabled = clockLoading || (action.isClockAction && hasClockedInToday);
 
@@ -375,62 +376,81 @@ export default function DashboardUser() {
                     key={action.label}
                     onClick={action.onClick}
                     disabled={disabled}
-                    className={`rounded-xl px-4 py-3 text-sm font-bold shadow-sm border transition cursor-pointer ${
+                    className={`group relative flex items-center justify-center gap-3 rounded-2xl px-6 py-4 text-sm font-bold shadow-md transition-all transform active:scale-95 ${
                       disabled
-                        ? "bg-gray-200 text-gray-500 border-gray-200 cursor-not-allowed"
-                        : "bg-yellow-400 text-green-950 border-yellow-300 hover:bg-yellow-300"
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-[#fbbf24] text-green-950 hover:bg-[#f59e0b] hover:shadow-lg hover:-translate-y-0.5"
                     }`}
                   >
-                    {clockLoading && action.isClockAction ? "Processing..." : action.label}
+                    <span className="opacity-80 group-hover:opacity-100 transition-opacity">
+                        {action.icon}
+                    </span>
+                    <span>
+                      {clockLoading && action.isClockAction ? "Processing..." : action.label}
+                    </span>
                   </button>
                 );
               })}
             </div>
 
-            {/* CARDS GRID */}
-            <div className="mt-7 flex justify-center">
-              {/* LEAVE BALANCE CARD */}
-              <div className="w-full max-w-xxl rounded-2xl border border-yellow-200 bg-white shadow-sm overflow-hidden">
-                <div className="bg-green-800 px-4 py-3">
-                  <h3 className="font-bold text-yellow-300">Available Leave Days</h3>
-                  <p className="text-xs text-yellow-100">
-                    Balances include pending + approved requests.
-                  </p>
-                </div>
-
-                <div className="p-4">
-                  {loadingLeaves ? (
-                    <p className="text-sm text-green-700">Loading leave plans...</p>
-                  ) : leaveOptions.length === 0 ? (
-                    <p className="text-sm text-red-600">
-                      No leave plans available. Please contact your administrator.
-                    </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {leaveOptions.map((plan) => {
-                        const remaining = leaveBalances[plan.id] ?? plan.days;
-                        const used = plan.days - remaining;
-                        const percent = plan.days > 0 ? (used / plan.days) * 100 : 0;
-
-                        return (
-                          <ProgressBar
-                            key={plan.id}
-                            label={plan.label}
-                            value={`${remaining} of ${plan.days} days`}
-                            percent={percent}
-                          />
-                        );
-                      })}
+            {/* LEAVE BALANCE CARD */}
+            <div className="rounded-3xl bg-white shadow-xl shadow-gray-200/50 overflow-hidden border border-gray-100">
+              <div className="bg-[#064e3b] px-6 py-5 border-b border-green-800">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-lg font-bold text-white">Available Leave Days</h3>
+                        <p className="text-xs text-green-200/80 mt-0.5">
+                        Balances include pending + approved requests.
+                        </p>
                     </div>
-                  )}
+                    <div className="p-2 bg-green-800 rounded-lg">
+                        <Calendar className="text-green-200" size={20}/>
+                    </div>
                 </div>
               </div>
+
+              <div className="p-6 sm:p-8">
+                {loadingLeaves ? (
+                  <div className="py-8 text-center text-gray-500 animate-pulse">Loading balances...</div>
+                ) : leaveOptions.length === 0 ? (
+                  <div className="py-8 text-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                    No leave plans available.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6">
+                    {leaveOptions.map((plan) => {
+                      const remaining = leaveBalances[plan.id] ?? plan.days;
+                      const used = plan.days - remaining;
+                      const percent = plan.days > 0 ? (used / plan.days) * 100 : 0;
+
+                      return (
+                        <ProgressBar
+                          key={plan.id}
+                          label={plan.label}
+                          remaining={remaining}
+                          total={plan.days}
+                          percent={percent}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </>
+          </div>
         )}
 
         {activeTab === "payroll" && <PayrollHistory employeeId={employeeId} />}
       </main>
+
+      {/* 🆕 FOOTER ADDED HERE */}
+      <footer className="bg-white border-t border-gray-200 mt-auto">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          <p className="text-center text-sm text-gray-500">
+            © 2025 CVSU. All rights reserved.
+          </p>
+        </div>
+      </footer>
 
       {profileModalOpen && (
         <ProfileModal
@@ -445,7 +465,7 @@ export default function DashboardUser() {
   );
 }
 
-/* ===== PAYROLL HISTORY WITH VIEW & DOWNLOAD ===== */
+/* ===== PAYROLL HISTORY WITH COLORFUL CARDS ===== */
 function PayrollHistory({ employeeId }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -540,62 +560,208 @@ function PayrollHistory({ employeeId }) {
   };
 
   return (
-    <section className="bg-[#f7f4e8] rounded-2xl p-6 shadow space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-green-800">Payroll History</h2>
-          <p className="text-sm text-gray-600">
-            View your payment records and download payslips.
-          </p>
+    <section className="space-y-6 animate-in fade-in duration-500">
+      {/* Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          Payroll History
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold bg-yellow-100 text-yellow-800">
+            {rows.length} Records
+          </span>
+        </h2>
+        <p className="text-sm text-gray-500 mt-1">
+          View your payment records and download payslips
+        </p>
+      </div>
+
+      {/* Colorful Stat Cards - Matching Image Design */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Total Paid - Green */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-green-500 to-green-600 p-6 text-white shadow-lg">
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-3">
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <span className="text-2xl">$</span>
+              </div>
+              <div className="p-1.5 bg-white/20 rounded-md">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clipRule="evenodd" />
+                </svg>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium opacity-90">Total Paid</p>
+              <p className="text-2xl font-extrabold tracking-tight">{peso(stats.total)}</p>
+            </div>
+          </div>
+          {/* Decorative blur */}
+          <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+        </div>
+
+        {/* Average Pay - Yellow/Orange */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-yellow-400 to-orange-400 p-6 text-white shadow-lg">
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-3">
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <div className="px-2 py-0.5 bg-white/20 rounded-md text-xs font-bold">AVG</div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium opacity-90">Average Pay</p>
+              <p className="text-2xl font-extrabold tracking-tight">{peso(stats.avg)}</p>
+            </div>
+          </div>
+          <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+        </div>
+
+        {/* Highest Pay - Teal/Green */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-teal-500 to-green-500 p-6 text-white shadow-lg">
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-3">
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              </div>
+              <div className="px-2 py-0.5 bg-white/20 rounded-md text-xs font-bold">HIGH</div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium opacity-90">Highest Pay</p>
+              <p className="text-2xl font-extrabold tracking-tight">{peso(stats.highest)}</p>
+            </div>
+          </div>
+          <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+        </div>
+
+        {/* Lowest Pay - Orange */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 p-6 text-white shadow-lg">
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-3">
+              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+              <div className="px-2 py-0.5 bg-white/20 rounded-md text-xs font-bold">LOW</div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium opacity-90">Lowest Pay</p>
+              <p className="text-2xl font-extrabold tracking-tight">{peso(stats.lowest)}</p>
+            </div>
+          </div>
+          <div className="absolute -bottom-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <SummaryCard label="Total Paid" value={peso(stats.total)} />
-        <SummaryCard label="Average Pay" value={peso(stats.avg)} />
-        <SummaryCard label="Highest Pay" value={peso(stats.highest)} />
-        <SummaryCard label="Lowest Pay" value={peso(stats.lowest)} />
-      </div>
-
-      <div className="bg-white rounded-xl p-4 shadow overflow-x-auto">
-        {errMsg && <p className="text-sm text-red-600 mb-3">{errMsg}</p>}
-
-        {loading ? (
-          <p className="text-sm text-gray-600">Loading payroll records...</p>
-        ) : (
-          <table className="w-full text-xs sm:text-sm">
-            <thead className="text-green-800">
-              <tr>
-                <th className="text-left py-2">Period</th>
-                <th className="text-left py-2">Total Earnings</th>
-                <th className="text-left py-2">Status</th>
-                <th className="text-left py-2">Actions</th>
-              </tr>
-            </thead>
-
-            <tbody className="divide-y text-gray-700">
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="py-3 text-gray-600">
-                    No payroll records yet.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((r) => (
-                  <PayrollRow
-                    key={r.id}
-                    period={formatPeriod(r.period_start, r.period_end)}
-                    paidDate={formatDate(r.paid_at)}
-                    earnings={peso(Number(r.gross_pay) || 0)}
-                    status={r.status || "Paid"}
-                    onView={() => setViewingPayslip(r)}
-                    onDownload={() => handleDownload(r)}
-                  />
-                ))
-              )}
-            </tbody>
-          </table>
+      {/* Table Card */}
+      <div className="bg-white rounded-2xl shadow-lg shadow-gray-200/50 overflow-hidden border border-gray-100">
+        {errMsg && (
+          <div className="px-6 py-4 bg-red-50 border-b border-red-100">
+            <p className="text-sm text-red-600 font-medium">{errMsg}</p>
+          </div>
         )}
+
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="p-12 text-center text-gray-400">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-green-600 mb-3"></div>
+              <p>Loading payroll records...</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <div className="flex items-center gap-2">
+                      <Calendar size={14} />
+                      Period
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                    <div className="flex items-center gap-2">
+                      <Receipt size={14} />
+                      Total Earnings
+                    </div>
+                  </th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-gray-50">
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3 text-gray-400">
+                        <div className="p-4 bg-gray-50 rounded-full">
+                          <Receipt size={32} className="text-gray-300" />
+                        </div>
+                        <p className="font-medium">No payroll records found</p>
+                        <p className="text-xs">Your payment history will appear here</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r, idx) => (
+                    <tr key={r.id} className="hover:bg-gray-50/80 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-green-100 text-green-700 font-bold text-sm">
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <div className="font-bold text-gray-900">
+                              {formatPeriod(r.period_start, r.period_end)}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                              <Calendar size={12} />
+                              Paid: {formatDate(r.paid_at)}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <span className="font-bold text-green-700 text-base">
+                          {peso(Number(r.gross_pay) || 0)}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-50 text-green-700 ring-1 ring-green-600/20">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
+                          {r.status || "Paid"}
+                        </span>
+                      </td>
+
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setViewingPayslip(r)}
+                            className="p-2 text-gray-400 hover:bg-green-50 hover:text-green-700 rounded-lg transition-colors group/btn"
+                            title="View Details"
+                          >
+                            <Eye size={18} className="group-hover/btn:scale-110 transition-transform" />
+                          </button>
+                          <button
+                            onClick={() => handleDownload(r)}
+                            className="p-2 text-gray-400 hover:bg-green-50 hover:text-green-700 rounded-lg transition-colors group/btn"
+                            title="Download PDF"
+                          >
+                            <Download size={18} className="group-hover/btn:scale-110 transition-transform" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {viewingPayslip && (
@@ -610,81 +776,45 @@ function PayrollHistory({ employeeId }) {
   );
 }
 
-function PayrollRow({ period, paidDate, earnings, status, onView, onDownload }) {
-  return (
-    <tr>
-      <td className="py-2">
-        <div className="font-medium">{period}</div>
-        <div className="text-[11px] text-gray-500">Paid: {paidDate}</div>
-      </td>
-
-      <td className="font-semibold text-green-800">{earnings}</td>
-
-      <td>
-        <span className="inline-block px-3 py-1 text-xs rounded-full bg-green-100 text-green-700">
-          {status}
-        </span>
-      </td>
-
-      <td className="flex items-center gap-2 py-2 text-gray-500">
-        <button
-          onClick={onView}
-          className="p-1.5 hover:bg-green-50 rounded-full hover:text-green-700 transition"
-          title="View Details"
-        >
-          <Eye size={16} />
-        </button>
-        <button
-          onClick={onDownload}
-          className="p-1.5 hover:bg-green-50 rounded-full hover:text-green-700 transition"
-          title="Download PDF"
-        >
-          <Download size={16} />
-        </button>
-      </td>
-    </tr>
-  );
-}
-
 /* ===== PAYSLIP MODAL ===== */
 function PayslipViewModal({ record, onClose, peso, period }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-yellow-200">
-        <div className="bg-green-700 p-4 flex justify-between items-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden scale-100 animate-in zoom-in-95 duration-200">
+        <div className="bg-green-900 px-6 py-5 flex justify-between items-center">
           <h3 className="text-white font-bold text-lg">Payslip Details</h3>
-          <button onClick={onClose} className="text-white/80 hover:text-white transition">
+          <button onClick={onClose} className="text-white/60 hover:text-white transition rounded-full hover:bg-white/10 p-1">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="text-center border-b border-gray-100 pb-4">
-            <p className="text-sm text-gray-500 uppercase tracking-wide">Pay Period</p>
-            <p className="text-green-900 font-bold text-lg">{period}</p>
+        <div className="p-8 space-y-6">
+          <div className="text-center">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Pay Period</p>
+            <p className="text-gray-900 font-extrabold text-xl">{period}</p>
           </div>
 
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Gross Pay</span>
-              <span className="font-medium text-gray-900">{peso(record.gross_pay)}</span>
+          <div className="space-y-4 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600 font-medium">Gross Pay</span>
+              <span className="font-bold text-gray-900">{peso(record.gross_pay)}</span>
             </div>
-            <div className="flex justify-between text-red-600">
-              <span>Deductions</span>
+            <div className="flex justify-between items-center text-red-600">
+              <span className="font-medium">Deductions</span>
               <span>- {peso(record.deductions)}</span>
             </div>
-            <div className="h-px bg-gray-200 my-2"></div>
-            <div className="flex justify-between text-lg font-bold text-green-800">
-              <span>Net Pay</span>
-              <span>{peso(record.net_pay)}</span>
+            <div className="h-px bg-gray-200 my-1"></div>
+            <div className="flex justify-between items-center text-lg">
+              <span className="font-bold text-green-900">Net Pay</span>
+              <span className="font-extrabold text-green-700">{peso(record.net_pay)}</span>
             </div>
           </div>
         </div>
 
-        <div className="bg-gray-50 p-4 text-center">
+        <div className="bg-gray-50 px-6 py-4 text-center border-t border-gray-100">
           <button
             onClick={onClose}
-            className="text-sm text-gray-500 hover:text-green-700 font-medium transition"
+            className="w-full text-sm font-bold text-gray-600 hover:text-gray-900 py-2 transition"
           >
             Close
           </button>
@@ -694,24 +824,20 @@ function PayslipViewModal({ record, onClose, peso, period }) {
   );
 }
 
-function SummaryCard({ label, value }) {
-  return (
-    <div className="bg-white rounded-xl p-4 shadow">
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="text-lg font-semibold text-green-700">{value}</p>
-    </div>
-  );
-}
-
-function ProgressBar({ label, value, percent }) {
+function ProgressBar({ label, remaining, total, percent }) {
   return (
     <div>
-      <div className="flex justify-between text-sm mb-1">
-        <span className="text-green-900 font-semibold">{label}</span>
-        <span className="text-green-700">{value}</span>
+      <div className="flex justify-between items-end mb-2">
+        <span className="text-gray-900 font-bold text-sm">{label}</span>
+        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+            {remaining} days left
+        </span>
       </div>
-      <div className="w-full bg-yellow-100 rounded-full h-2">
-        <div className="bg-green-700 h-2 rounded-full" style={{ width: `${percent}%` }} />
+      <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+        <div 
+            className="bg-gradient-to-r from-green-600 to-green-500 h-full rounded-full transition-all duration-1000 ease-out" 
+            style={{ width: `${100 - percent}%` }} 
+        />
       </div>
     </div>
   );
@@ -720,87 +846,95 @@ function ProgressBar({ label, value, percent }) {
 function ProfileModal({ onClose, profile, onChange }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-white rounded-xl max-w-lg w-full p-8 relative shadow-lg border-2 border-yellow-400">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-5 right-5 text-green-800 hover:text-red-500 transition cursor-pointer"
-          aria-label="Close"
-        >
-          <X size={24} />
-        </button>
+      <div className="bg-white rounded-3xl max-w-lg w-full p-8 relative shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-gray-900">Edit Profile</h3>
+            <button
+            type="button"
+            onClick={onClose}
+            className="text-gray-400 hover:text-red-500 transition rounded-full p-1 hover:bg-red-50"
+            aria-label="Close"
+            >
+            <X size={24} />
+            </button>
+        </div>
 
         <form className="space-y-4">
-          {/* Profile Fields... */}
-          <div>
-            <label className="block mb-1 text-sm font-semibold">Full Name</label>
-            <input
-              name="name"
-              value={profile.name}
-              onChange={onChange}
-              className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label className="block mb-1.5 text-xs font-bold text-gray-500 uppercase">Full Name</label>
+                <input
+                name="name"
+                value={profile.name}
+                onChange={onChange}
+                className="w-full rounded-xl px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
+                />
+            </div>
+            <div>
+                <label className="block mb-1.5 text-xs font-bold text-gray-500 uppercase">Email</label>
+                <input
+                name="email"
+                value={profile.email}
+                onChange={onChange}
+                className="w-full rounded-xl px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
+                />
+            </div>
           </div>
-          <div>
-            <label className="block mb-1 text-sm font-semibold">Email</label>
-            <input
-              name="email"
-              value={profile.email}
-              onChange={onChange}
-              className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
-            />
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label className="block mb-1.5 text-xs font-bold text-gray-500 uppercase">Department</label>
+                <input
+                name="department"
+                value={profile.department}
+                onChange={onChange}
+                className="w-full rounded-xl px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
+                />
+            </div>
+            <div>
+                <label className="block mb-1.5 text-xs font-bold text-gray-500 uppercase">Role</label>
+                <input
+                name="role"
+                value={profile.role}
+                onChange={onChange}
+                className="w-full rounded-xl px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
+                />
+            </div>
           </div>
+
           <div>
-            <label className="block mb-1 text-sm font-semibold">Department</label>
-            <input
-              name="department"
-              value={profile.department}
-              onChange={onChange}
-              className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
-            />
-          </div>
-          <div>
-            <label className="block mb-1 text-sm font-semibold">Role/Position</label>
-            <input
-              name="role"
-              value={profile.role}
-              onChange={onChange}
-              className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
-            />
-          </div>
-          <div>
-            <label className="block mb-1 text-sm font-semibold">Contact</label>
+            <label className="block mb-1.5 text-xs font-bold text-gray-500 uppercase">Contact</label>
             <input
               name="contact"
               value={profile.contact}
               onChange={onChange}
-              className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
+              className="w-full rounded-xl px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
             />
           </div>
           <div>
-            <label className="block mb-1 text-sm font-semibold">Address</label>
+            <label className="block mb-1.5 text-xs font-bold text-gray-500 uppercase">Address</label>
             <input
               name="address"
               value={profile.address}
               onChange={onChange}
-              className="w-full rounded-md px-3 py-2 bg-yellow-50 border"
+              className="w-full rounded-xl px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
             />
           </div>
 
-          <div className="flex gap-4 mt-4">
+          <div className="flex gap-3 mt-6 pt-2">
             <button
               type="submit"
-              className="w-full bg-green-700 text-white py-2 rounded font-bold hover:bg-yellow-400 hover:text-green-900 transition cursor-pointer"
+              className="flex-1 bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-700/30 hover:bg-green-800 hover:shadow-xl transition transform active:scale-95"
             >
-              Save
+              Save Changes
             </button>
             <button
               type="reset"
-              className="w-full bg-white border-2 border-black text-black py-2 rounded font-bold hover:bg-yellow-400 hover:text-green-900 transition cursor-pointer"
+              className="px-6 bg-white border border-gray-200 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-50 hover:border-gray-300 transition"
             >
               Reset
             </button>

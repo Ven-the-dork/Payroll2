@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, X, Paperclip } from "lucide-react";
+import { User, X, Paperclip, Calendar, Clock, FileText, ChevronLeft, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
@@ -351,16 +351,22 @@ export default function ApplyForLeaveMockup() {
   }
 
   return (
-    <div className="min-h-screen bg-green-50 text-green-900 font-sans">
-      <header className="bg-white shadow-sm">
-        <nav className="container mx-auto flex justify-between items-center px-2 sm:px-4 md:px-6 py-3 sm:py-4">
-          <div className="flex items-center space-x-4 sm:space-x-8">
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-green-700">
-              Dashboard
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100 shadow-sm">
+        <nav className="max-w-6xl mx-auto flex justify-between items-center px-6 py-4">
+          <div className="flex items-center gap-4">
+            <button
+                onClick={handleBackToDashboard}
+                className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-green-700 transition"
+                title="Back to Dashboard"
+            >
+                <ArrowLeft size={20} />
+            </button>
+            <h1 className="text-xl font-bold text-gray-800 tracking-tight">
+              Apply for Leave
             </h1>
           </div>
 
-          {/* ✅ ONLY THIS PART CHANGED (icons block replaced with reusable UserTopBar) */}
           <UserTopBar
             notifOpen={notifOpen}
             setNotifOpen={setNotifOpen}
@@ -372,117 +378,132 @@ export default function ApplyForLeaveMockup() {
         </nav>
       </header>
 
-      <div className="w-full max-w-6xl mx-auto mt-6 mb-2">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs bg-white px-4 py-2 rounded border border-yellow-100 text-green-700">
-            Dashboard &gt; Apply for Leave
-          </div>
-          <button
-            onClick={handleBackToDashboard}
-            className="text-xs sm:text-sm bg-green-700 text-white px-3 py-1 rounded shadow hover:bg-yellow-400 hover:text-green-900 transition cursor-pointer"
-          >
-            ← Back to Dashboard
-          </button>
-        </div>
-
-        <div className="bg-white rounded p-6 mb-3">
-          {loadingLeaves ? (
-            <p className="text-sm text-green-700">Loading leave plans...</p>
-          ) : leaveOptions.length === 0 ? (
-            <p className="text-sm text-red-600">
-              No leave plans available. Please contact your administrator.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {leaveOptions.map((opt) => (
-                <LeaveTypeCard
-                  key={opt.id}
-                  days={opt.days}
-                  label={opt.label}
-                  remaining={leaveBalances[opt.id]}
-                  onApply={() => openModal(opt)}
-                />
-              ))}
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        
+        {/* LEAVE TYPES GRID */}
+        <section>
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                    <Calendar className="text-green-600" size={20}/>
+                    Select Leave Type
+                </h2>
+                <span className="text-xs font-medium text-gray-500 bg-white px-3 py-1 rounded-full shadow-sm border border-gray-100">
+                    Balances include pending requests
+                </span>
             </div>
-          )}
-        </div>
 
-        <div className="bg-white rounded p-4 shadow border border-yellow-200">
-          <div className="flex justify-between mb-2 items-center">
-            <span className="font-bold text-base text-green-800">Leave History</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="bg-yellow-100 text-green-900">
-                  <th className="p-2 font-semibold text-left">Leave Type</th>
-                  <th className="p-2 font-semibold text-left">Duration</th>
-                  <th className="p-2 font-semibold text-left">Start Date</th>
-                  <th className="p-2 font-semibold text-left">End Date</th>
-                  <th className="p-2 font-semibold text-left">File</th>
-                  <th className="p-2 font-semibold text-left">Status</th>
-                  <th className="p-2 font-semibold text-left">Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loadingHistory ? (
-                  <tr>
-                    <td colSpan="7" className="p-3 text-center text-sm text-gray-600">
-                      Loading...
-                    </td>
-                  </tr>
-                ) : leaveHistory.length === 0 ? (
-                  <tr className="bg-green-50">
-                    <td colSpan="7" className="p-3 text-center text-sm text-gray-600">
-                      No leave applications yet. Apply for leave above.
-                    </td>
-                  </tr>
-                ) : (
-                  leaveHistory.map((app, index) => (
-                    <tr
-                      key={app.id}
-                      className={index % 2 === 0 ? "bg-green-50" : "bg-white"}
-                    >
-                      <td className="p-2">{app.leave_plans?.name || "N/A"}</td>
-                      <td className="p-2">{app.duration_days} days</td>
-                      <td className="p-2">{new Date(app.start_date).toLocaleDateString()}</td>
-                      <td className="p-2">{new Date(app.end_date).toLocaleDateString()}</td>
-                      <td className="p-2">
-                        {app.attachment_url ? (
-                          <a
-                            href={app.attachment_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 hover:underline flex items-center gap-1"
-                          >
-                            <Paperclip size={14} /> View
-                          </a>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="p-2">
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-semibold ${
-                            app.status === "approved"
-                              ? "bg-green-200 text-green-800"
-                              : app.status === "rejected"
-                              ? "bg-red-200 text-red-800"
-                              : "bg-yellow-200 text-yellow-800"
-                          }`}
-                        >
-                          {app.status.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="p-2">{app.reason}</td>
+            <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-gray-200/50 border border-gray-100">
+            {loadingLeaves ? (
+                <div className="py-12 text-center text-gray-400 animate-pulse">Loading leave plans...</div>
+            ) : leaveOptions.length === 0 ? (
+                <div className="py-12 text-center text-red-500 bg-red-50 rounded-2xl border border-red-100">
+                No leave plans available. Please contact HR.
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {leaveOptions.map((opt) => (
+                    <LeaveTypeCard
+                    key={opt.id}
+                    days={opt.days}
+                    label={opt.label}
+                    remaining={leaveBalances[opt.id]}
+                    onApply={() => openModal(opt)}
+                    />
+                ))}
+                </div>
+            )}
+            </div>
+        </section>
+
+        {/* LEAVE HISTORY TABLE */}
+        <section>
+            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <Clock className="text-green-600" size={20}/>
+                Application History
+            </h2>
+            
+            <div className="bg-white rounded-3xl shadow-lg shadow-gray-200/50 overflow-hidden border border-gray-100">
+             <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-500 font-semibold uppercase text-xs">
+                    <tr>
+                    <th className="px-6 py-4">Leave Type</th>
+                    <th className="px-6 py-4">Duration</th>
+                    <th className="px-6 py-4">Date Range</th>
+                    <th className="px-6 py-4">File</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Reason</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                    {loadingHistory ? (
+                    <tr>
+                        <td colSpan="6" className="px-6 py-8 text-center text-gray-400">
+                        Loading history...
+                        </td>
+                    </tr>
+                    ) : leaveHistory.length === 0 ? (
+                    <tr>
+                        <td colSpan="6" className="px-6 py-8 text-center text-gray-400">
+                        No leave applications yet.
+                        </td>
+                    </tr>
+                    ) : (
+                    leaveHistory.map((app) => (
+                        <tr key={app.id} className="hover:bg-gray-50/80 transition-colors">
+                        <td className="px-6 py-4 font-bold text-gray-800">
+                            {app.leave_plans?.name || "N/A"}
+                        </td>
+                        <td className="px-6 py-4 text-gray-600">
+                            <span className="font-semibold">{app.duration_days}</span> days
+                        </td>
+                        <td className="px-6 py-4 text-gray-600 text-xs">
+                            <div className="flex flex-col">
+                                <span>{new Date(app.start_date).toLocaleDateString()}</span>
+                                <span className="text-gray-400">to</span>
+                                <span>{new Date(app.end_date).toLocaleDateString()}</span>
+                            </div>
+                        </td>
+                        <td className="px-6 py-4">
+                            {app.attachment_url ? (
+                            <a
+                                href={app.attachment_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition text-xs font-medium"
+                            >
+                                <Paperclip size={14} /> View
+                            </a>
+                            ) : (
+                            <span className="text-gray-300">-</span>
+                            )}
+                        </td>
+                        <td className="px-6 py-4">
+                            <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ${
+                                app.status === "approved"
+                                ? "bg-green-100 text-green-700"
+                                : app.status === "rejected"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-yellow-100 text-yellow-700"
+                            }`}
+                            >
+                            {app.status}
+                            </span>
+                        </td>
+                        <td className="px-6 py-4 text-gray-500 max-w-xs truncate" title={app.reason}>
+                            {app.reason}
+                        </td>
+                        </tr>
+                    ))
+                    )}
+                </tbody>
+                </table>
+             </div>
+            </div>
+        </section>
+
+      </main>
 
       {modalOpen && (
         <Modal
@@ -507,26 +528,51 @@ export default function ApplyForLeaveMockup() {
 
 function LeaveTypeCard({ days, label, remaining, onApply }) {
   const balance = remaining !== undefined ? remaining : days;
+  const isExhausted = balance === 0;
+
   return (
-    <div className="flex flex-col items-center justify-between bg-green-900 text-yellow-400 rounded-xl shadow-lg border-2 border-yellow-300 w-full h-44 py-6 px-3 relative overflow-hidden group">
-      <div className="absolute top-0 right-0 w-16 h-16 bg-white/10 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-150"></div>
-      <div className="text-center z-10">
-        <span className="text-4xl font-extrabold mb-1 block">{balance}</span>
-        <span className="text-xs text-green-200 uppercase tracking-wider font-semibold block mb-2">
-          Days Left
-        </span>
-        <span className="text-lg font-bold text-white block">{label}</span>
+    <div className={`group relative flex flex-col justify-between overflow-hidden rounded-3xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl ${
+        isExhausted 
+        ? "bg-gray-100 border border-gray-200" 
+        : "bg-gradient-to-br from-green-800 to-green-900 border border-green-700 shadow-xl shadow-green-900/20"
+    }`}>
+      
+      {/* Background decoration */}
+      {!isExhausted && (
+          <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-yellow-400/10 blur-2xl group-hover:bg-yellow-400/20 transition-all duration-500"></div>
+      )}
+
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-4">
+             <div className={`p-2 rounded-xl ${isExhausted ? "bg-gray-200" : "bg-white/10"}`}>
+                <FileText className={isExhausted ? "text-gray-400" : "text-yellow-300"} size={24} />
+             </div>
+             <span className={`text-xs font-bold uppercase tracking-wider ${isExhausted ? "text-gray-400" : "text-green-200"}`}>
+                {isExhausted ? "Unavailable" : "Available"}
+             </span>
+        </div>
+        
+        <h3 className={`text-4xl font-extrabold tracking-tight mb-1 ${isExhausted ? "text-gray-400" : "text-white"}`}>
+            {balance}
+        </h3>
+        <p className={`text-sm font-medium ${isExhausted ? "text-gray-400" : "text-green-100/80"}`}>
+             days remaining
+        </p>
+        <p className={`mt-4 text-lg font-bold ${isExhausted ? "text-gray-500" : "text-white"}`}>
+            {label}
+        </p>
       </div>
+
       <button
         onClick={onApply}
-        disabled={balance === 0}
-        className={`mt-2 px-6 py-2 rounded font-bold text-sm transition cursor-pointer z-10 ${
-          balance === 0
-            ? "bg-gray-500 text-gray-300 cursor-not-allowed"
-            : "bg-yellow-400 text-green-900 hover:bg-white hover:text-green-900 hover:ring-2 hover:ring-yellow-400"
+        disabled={isExhausted}
+        className={`mt-6 w-full rounded-xl py-3 text-sm font-bold shadow-sm transition-all transform active:scale-95 ${
+          isExhausted
+            ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+            : "bg-[#fbbf24] text-green-900 hover:bg-[#f59e0b] hover:shadow-lg"
         }`}
       >
-        {balance === 0 ? "Exhausted" : "Apply"}
+        {isExhausted ? "Limit Reached" : "Apply Now"}
       </button>
     </div>
   );
@@ -548,51 +594,31 @@ function Modal({
   submitting,
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-xl max-w-lg w-full p-8 relative shadow-lg border-2 border-green-300 animate-fadeIn">
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 text-green-800 hover:text-red-500 transition"
-        >
-          <X size={24} />
-        </button>
-        <div className="flex flex-col items-center mb-5">
-          <span className="text-3xl mb-2">📖</span>
-          <h2 className="font-bold text-2xl text-center mb-1">Leave Application</h2>
-          <p className="text-gray-500 text-sm text-center">
-            Fill the required fields below to apply for {leaveType?.label?.toLowerCase()}.
-          </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-8 relative shadow-2xl animate-in zoom-in-95 duration-200 border border-gray-100">
+        <div className="flex justify-between items-center mb-6">
+            <div>
+                <h2 className="text-2xl font-bold text-gray-900">New Application</h2>
+                <p className="text-sm text-gray-500 mt-1">Applying for <span className="text-green-700 font-bold">{leaveType?.label}</span></p>
+            </div>
+            <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition"
+            >
+            <X size={24} />
+            </button>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-green-800 mb-1">
-                Leave Type
-              </label>
-              <input
-                type="text"
-                value={leaveType?.label || ""}
-                readOnly
-                className="w-full p-2 bg-gray-100 border border-gray-300 rounded text-sm text-gray-600"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-green-800 mb-1">
-                Remaining Balance
-              </label>
-              <input
-                type="text"
-                value={`${remainingBalance} Days`}
-                readOnly
-                className="w-full p-2 bg-green-50 border border-green-200 text-green-800 font-bold rounded text-sm"
-              />
-            </div>
+        <form onSubmit={onSubmit} className="space-y-5">
+          {/* Balance Indicator */}
+          <div className="bg-green-50 rounded-xl px-4 py-3 flex justify-between items-center border border-green-100">
+            <span className="text-sm font-medium text-green-800">Current Balance</span>
+            <span className="text-lg font-bold text-green-700">{remainingBalance} Days</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-green-800 mb-1">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">
                 Start Date
               </label>
               <input
@@ -600,11 +626,11 @@ function Modal({
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 required
-                className="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold text-green-800 mb-1">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">
                 End Date
               </label>
               <input
@@ -612,50 +638,48 @@ function Modal({
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 required
-                className="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition"
               />
             </div>
-
-            {/* Display Total Working Days */}
-            <div className="col-span-2 bg-yellow-50 px-3 py-2 rounded border border-yellow-200">
-              <p className="text-xs text-green-800 flex justify-between items-center">
-                <span>Total Working Days:</span>
-                <span className="font-bold text-lg">{calculateDuration(startDate, endDate)} days</span>
-              </p>
-              <p className="text-[10px] text-gray-500 text-right mt-1">(Weekends excluded)</p>
-            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-green-800 mb-1">
-              Attachment <span className="text-gray-400 font-normal">(Optional)</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <label className="cursor-pointer bg-white border border-yellow-300 text-green-800 px-3 py-2 rounded text-sm hover:bg-yellow-50 transition flex items-center gap-2">
-                <Paperclip size={16} />
-                {attachment ? "Change File" : "Upload Document"}
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setAttachment(e.target.files[0]);
-                    }
-                  }}
-                />
-              </label>
-              {attachment && (
-                <span className="text-sm text-gray-600 truncate max-w-[200px]">
-                  {attachment.name}
+           {/* Duration Preview */}
+           <div className="flex justify-between items-center px-2">
+                <span className="text-xs text-gray-400 font-medium">Weekends are automatically excluded</span>
+                <span className="text-sm font-bold text-gray-700">
+                    Total: <span className="text-green-600">{calculateDuration(startDate, endDate)} days</span>
                 </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-400 mt-1">Accepts PDF, JPG, PNG (Max 5MB)</p>
+           </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">
+              Supporting Document <span className="normal-case font-normal text-gray-400">(Optional)</span>
+            </label>
+            <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-gray-200 border-dashed rounded-xl cursor-pointer hover:bg-gray-50 hover:border-green-400 transition group">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    {attachment ? (
+                        <div className="flex items-center gap-2 text-green-600">
+                            <FileText size={20} />
+                            <p className="text-sm font-medium truncate max-w-[200px]">{attachment.name}</p>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center gap-1 text-gray-400 group-hover:text-green-600 transition-colors">
+                            <Paperclip size={20} />
+                            <p className="text-xs font-medium">Click to upload file</p>
+                        </div>
+                    )}
+                </div>
+                <input 
+                    type="file" 
+                    className="hidden" 
+                    accept=".pdf,.png,.jpg,.jpeg"
+                    onChange={(e) => e.target.files && setAttachment(e.target.files[0])}
+                />
+            </label>
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-green-800 mb-1">
+            <label className="block text-xs font-bold text-gray-500 uppercase mb-1.5">
               Reason for Leave
             </label>
             <textarea
@@ -663,25 +687,25 @@ function Modal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               required
-              placeholder="Enter your reason..."
-              className="w-full p-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+              placeholder="Please describe why you are requesting leave..."
+              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:border-green-500 focus:ring-2 focus:ring-green-200 outline-none transition resize-none"
             />
           </div>
 
           <div className="flex gap-3 pt-2">
             <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 bg-green-700 text-white py-2 px-4 rounded font-semibold text-sm hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              {submitting ? "Submitting..." : "Submit Application"}
-            </button>
-            <button
               type="button"
               onClick={onClose}
-              className="flex-1 border border-green-700 text-green-700 py-2 px-4 rounded font-semibold text-sm hover:bg-gray-50 transition"
+              className="flex-1 px-4 py-3 border border-gray-200 text-gray-700 rounded-xl font-bold text-sm hover:bg-gray-50 transition"
             >
               Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="flex-1 bg-green-700 text-white px-4 py-3 rounded-xl font-bold text-sm shadow-lg shadow-green-700/30 hover:bg-green-800 hover:shadow-xl transition transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? "Submitting..." : "Submit Application"}
             </button>
           </div>
         </form>
