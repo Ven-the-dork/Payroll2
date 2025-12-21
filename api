@@ -1,9 +1,0 @@
-#clockify
-VITE_CLOCKIFY_API_KEY=YzI1ZGQ2MWMtM2VhYi00MmU0LWIyYjYtMTY4MGRiNzk3Zjdj
-VITE_CLOCKIFY_WORKSPACE_ID=69399acc2d8d3a36ae5cfa8a
-VITE_SUPABASE_URL=https://zylwkjgetiiewdlzxmdr.supabase.co
-VITE_SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5bHdramdldGlpZXdkbHp4bWRyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzIxNTE3OCwiZXhwIjoyMDc4NzkxMTc4fQ.lI_XkiChzdGv7G5uxZvTO91ay3prA0mD6wRyfqly4pc
-
-curl -X GET ^
-  "https://api.clockify.me/api/v1/workspaces/69399acc2d8d3a36ae5cfa8a/users?memberships=ALL" ^
-  -H "X-Api-Key: YzI1ZGQ2MWMtM2VhYi00MmU0LWIyYjYtMTY4MGRiNzk3Zjdj"
