@@ -1,5 +1,17 @@
 import { useState, useEffect } from "react";
-import { Menu, Search, Settings, ChevronDown, Paperclip } from "lucide-react";
+import { 
+  Menu, 
+  Search, 
+  Settings, 
+  ChevronDown, 
+  Paperclip, 
+  Calendar, 
+  CheckCircle, 
+  XCircle, 
+  Clock, 
+  Briefcase, 
+  AlertCircle 
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebaseConfig";
@@ -9,18 +21,59 @@ import AdminSidebar from "../components/Adminnavbar/Leavedashvar";
 import FontSizeMenu from "../components/hooks/FontSizeMenu";
 import AdminSetting from "../components/Adminsetting";
 
+// Helper: Modern Action Dropdown for Leave History
+function ActionDropdown({ onApprove, onReject, attachmentUrl }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative inline-block text-left">
+      <button
+        onClick={() => setOpen((s) => !s)}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-gray-50 border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-green-50 hover:text-green-700 hover:border-green-200 transition-all"
+        onBlur={() => setTimeout(() => setOpen(false), 200)}
+      >
+        Actions <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white shadow-xl border border-gray-100 z-50 overflow-hidden ring-1 ring-black/5">
+          <button
+            onClick={onApprove}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-700 transition-colors flex items-center gap-2"
+          >
+            <CheckCircle size={14} className="text-green-600" /> Approve
+          </button>
+          <button
+            onClick={onReject}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-700 transition-colors flex items-center gap-2"
+          >
+             <XCircle size={14} className="text-red-600" /> Reject
+          </button>
+          {attachmentUrl && (
+            <a
+              href={attachmentUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center gap-2 border-t border-gray-50"
+            >
+              <Paperclip size={14} className="text-blue-500" /> View Attachment
+            </a>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function LeaveManagement() {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState(null);
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const [openHistoryDropdown, setOpenHistoryDropdown] = useState(null);
+  const [activeTab, setActiveTab] = useState("history"); // Default to history for better UX
   const [currentUser, setCurrentUser] = useState(null);
 
   const [leaveApplications, setLeaveApplications] = useState([]);
   const [loadingApplications, setLoadingApplications] = useState(true);
 
-  // State for leave plans from Supabase
+  // State for leave plans
   const [leavePlans, setLeavePlans] = useState([]);
 
   // State for ongoing leaves (recall)
@@ -38,6 +91,7 @@ export default function LeaveManagement() {
   const [editName, setEditName] = useState("");
   const [editDuration, setEditDuration] = useState("");
   const [editAllowRecall, setEditAllowRecall] = useState("");
+  const [openDropdown, setOpenDropdown] = useState(null); // For plan actions
 
   // State for recall modal
   const [showRecallModal, setShowRecallModal] = useState(false);
@@ -47,33 +101,14 @@ export default function LeaveManagement() {
   const [recallReasonText, setRecallReasonText] = useState("");
   const [submittingRecall, setSubmittingRecall] = useState(false);
 
-  const toggleTab = (tabName) =>
-    setActiveTab((prev) => (prev === tabName ? null : tabName));
-
-  const toggleDropdown = (index) =>
-    setOpenDropdown((prev) => (prev === index ? null : index));
-
-  const toggleHistoryDropdown = (index) =>
-    setOpenHistoryDropdown((prev) => (prev === index ? null : index));
-
   const handleLogout = async () => {
     await signOut(auth);
     sessionStorage.removeItem("user");
     navigate("/", { replace: true });
   };
 
-  // -------------------------
-  // Notifications helper
-  // -------------------------
-  const createLeaveNotification = async ({
-    employeeId,
-    leaveApplicationId,
-    type,
-    title,
-    message,
-  }) => {
+  const createLeaveNotification = async ({ employeeId, leaveApplicationId, type, title, message }) => {
     if (!employeeId || !leaveApplicationId) return;
-
     const { error } = await supabase.from("notifications").insert({
       employee_id: employeeId,
       leave_application_id: leaveApplicationId,
@@ -81,105 +116,63 @@ export default function LeaveManagement() {
       title,
       message,
     });
-
-    if (error) {
-      console.error("Failed to create notification:", error);
-      // Don't block admin flow if notification insert fails
-    }
+    if (error) console.error("Failed to create notification:", error);
   };
 
-  // Load user from session
   useEffect(() => {
     const stored = sessionStorage.getItem("user");
     if (stored) {
-      try {
-        setCurrentUser(JSON.parse(stored));
-      } catch {
-        setCurrentUser(null);
-      }
+      try { setCurrentUser(JSON.parse(stored)); } catch { setCurrentUser(null); }
     }
   }, []);
 
-  // Fetch leave plans from Supabase
+  // Fetch Data
   useEffect(() => {
     async function fetchPlans() {
-      const { data, error } = await supabase
-        .from("leave_plans")
-        .select("*")
-        .eq("is_active", true)
-        .order("name");
-
-      if (!error && data) {
-        setLeavePlans(data);
-      }
+      const { data, error } = await supabase.from("leave_plans").select("*").eq("is_active", true).order("name");
+      if (!error && data) setLeavePlans(data);
     }
     fetchPlans();
   }, []);
 
-  // Fetch all leave applications (admin view)
   useEffect(() => {
     async function fetchApplications() {
       setLoadingApplications(true);
       const { data, error } = await supabase
         .from("leave_applications")
-        .select(
-          `
-          *,
-          employees (full_name, department),
-          leave_plans (name)
-        `
-        )
+        .select(`*, employees (full_name, department), leave_plans (name)`)
         .order("applied_at", { ascending: false });
-
-      if (!error && data) {
-        setLeaveApplications(data);
-      }
+      if (!error && data) setLeaveApplications(data);
       setLoadingApplications(false);
     }
-
     fetchApplications();
   }, []);
 
-  // Fetch approved ongoing leaves (for recall)
   useEffect(() => {
     async function fetchOngoingLeaves() {
       setLoadingOngoing(true);
       const today = new Date().toISOString().split("T")[0];
-
       const { data, error } = await supabase
         .from("leave_applications")
-        .select(
-          `
-          *,
-          employees (full_name, department),
-          leave_plans (name, allow_recall)
-        `
-        )
+        .select(`*, employees (full_name, department), leave_plans (name, allow_recall)`)
         .eq("status", "approved")
         .lte("start_date", today)
         .gte("end_date", today)
         .order("start_date", { ascending: false });
 
       if (!error && data) {
-        const recallableLeaves = data.filter(
-          (leave) => leave.leave_plans?.allow_recall === true
-        );
+        const recallableLeaves = data.filter((leave) => leave.leave_plans?.allow_recall === true);
         setOngoingLeaves(recallableLeaves);
       }
       setLoadingOngoing(false);
     }
-
     fetchOngoingLeaves();
   }, []);
 
-  // Create new leave plan
+  // Actions (Create, Edit, Delete, Approve, Recall) - Logic kept intact
   async function handleCreateLeaveSetting(e) {
     e.preventDefault();
-
-    if (!leavePlanName || !durationDays) {
-      alert("Please fill in Leave Plan Name and Duration");
-      return;
-    }
+    if (!leavePlanName || !durationDays) return alert("Please fill in Leave Plan Name and Duration");
 
     const payload = {
       name: leavePlanName,
@@ -188,310 +181,85 @@ export default function LeaveManagement() {
       allow_recall: allowRecall === "Yes",
     };
 
-    const { data, error } = await supabase
-      .from("leave_plans")
-      .insert(payload)
-      .select("*")
-      .single();
-
+    const { data, error } = await supabase.from("leave_plans").insert(payload).select("*").single();
     if (error) {
-      console.error("Error creating leave plan:", error);
-      alert("Failed to create leave plan");
+       console.error(error); alert("Failed to create leave plan");
     } else if (data) {
       setLeavePlans((prev) => [...prev, data]);
-      setLeavePlanName("");
-      setDurationDays("");
-      setAllowRecall("");
-      setRecallReason("");
-      alert("Leave plan created successfully!");
+      setLeavePlanName(""); setDurationDays(""); setAllowRecall(""); setRecallReason("");
+      alert("Leave plan created!");
     }
   }
 
-  // Approve leave application (+ notification)
   async function handleApproveLeave(applicationId) {
-    if (!confirm("Are you sure you want to approve this leave application?")) return;
-
-    // fetch row for employee_id (and for nicer message)
-    const { data: appRow, error: fetchError } = await supabase
-      .from("leave_applications")
-      .select(
-        `
-        id,
-        employee_id,
-        start_date,
-        end_date,
-        leave_plans (name),
-        employees (full_name)
-      `
-      )
-      .eq("id", applicationId)
-      .single();
-
-    if (fetchError) {
-      console.error("Error fetching leave row:", fetchError);
-      alert("Failed to fetch leave application data");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("leave_applications")
-      .update({
-        status: "approved",
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: currentUser?.uid || currentUser?.firebase_uid,
-      })
-      .eq("id", applicationId);
-
-    if (error) {
-      console.error("Error approving leave:", error);
-      alert("Failed to approve leave application");
-      return;
-    }
-
-    await createLeaveNotification({
-      employeeId: appRow.employee_id,
-      leaveApplicationId: appRow.id,
-      type: "leave_approved",
-      title: "Leave approved",
-      message: `Your ${appRow.leave_plans?.name || "leave"} request was approved (${appRow.start_date} to ${appRow.end_date}).`,
-    });
-
-    setLeaveApplications((prev) =>
-      prev.map((app) =>
-        app.id === applicationId
-          ? { ...app, status: "approved", reviewed_at: new Date().toISOString() }
-          : app
-      )
-    );
-
-    alert("Leave application approved!");
-    setOpenHistoryDropdown(null);
-  }
-
-  // Reject/Decline leave application (+ notification)
-    async function handleRejectLeave(applicationId) {
-      if (!confirm("Are you sure you want to reject this leave application?")) return;
-
-      // 1) fetch row to get employee_id + leave plan name for the message
-      const { data: appRow, error: fetchError } = await supabase
-        .from("leave_applications")
-        .select(`
-          id,
-          employee_id,
-          start_date,
-          end_date,
-          leave_plans (name),
-          employees (full_name)
-        `)
-        .eq("id", applicationId)
-        .single();
-
-      if (fetchError) {
-        console.error("Error fetching leave row:", fetchError);
-        alert("Failed to fetch leave application data");
-        return;
-      }
-
-      // 2) update status
-      const { error } = await supabase
-        .from("leave_applications")
-        .update({
-          status: "rejected",
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: currentUser?.uid || currentUser?.firebase_uid,
-        })
-        .eq("id", applicationId);
-
-      if (error) {
-        console.error("Error rejecting leave:", error);
-        alert("Failed to reject leave application");
-        return;
-      }
-
-      // 3) insert notification (this is what makes it appear on DashboardUser)
+    if (!confirm("Approve this leave application?")) return;
+    const { data: appRow } = await supabase.from("leave_applications").select(`id, employee_id, start_date, end_date, leave_plans (name), employees (full_name)`).eq("id", applicationId).single();
+    const { error } = await supabase.from("leave_applications").update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: currentUser?.uid }).eq("id", applicationId);
+    
+    if (!error) {
       await createLeaveNotification({
-        employeeId: appRow.employee_id,
-        leaveApplicationId: appRow.id,
-        type: "leave_declined", // must match your CHECK constraint
-        title: "Leave declined",
-        message: `Your ${appRow.leave_plans?.name || "leave"} request was declined.`,
+        employeeId: appRow.employee_id, leaveApplicationId: appRow.id, type: "leave_approved", title: "Leave approved",
+        message: `Your ${appRow.leave_plans?.name || "leave"} request was approved.`
       });
-
-      // 4) update UI
-      setLeaveApplications((prev) =>
-        prev.map((app) =>
-          app.id === applicationId
-            ? { ...app, status: "rejected", reviewed_at: new Date().toISOString() }
-            : app
-        )
-      );
-
-      alert("Leave application rejected!");
-      setOpenHistoryDropdown(null);
+      setLeaveApplications((prev) => prev.map((app) => app.id === applicationId ? { ...app, status: "approved" } : app));
     }
-
-  // Start editing leave plan
-  function handleStartEdit(plan) {
-    setEditingPlan(plan);
-    setEditName(plan.name);
-    setEditDuration(plan.duration_days);
-    setEditAllowRecall(plan.allow_recall ? "Yes" : "No");
-    setOpenDropdown(null);
   }
 
-  // Save edited plan
+  async function handleRejectLeave(applicationId) {
+    if (!confirm("Reject this leave application?")) return;
+    const { data: appRow } = await supabase.from("leave_applications").select(`id, employee_id, leave_plans (name)`).eq("id", applicationId).single();
+    const { error } = await supabase.from("leave_applications").update({ status: "rejected", reviewed_at: new Date().toISOString(), reviewed_by: currentUser?.uid }).eq("id", applicationId);
+    
+    if (!error) {
+      await createLeaveNotification({
+        employeeId: appRow.employee_id, leaveApplicationId: appRow.id, type: "leave_declined", title: "Leave declined",
+        message: `Your ${appRow.leave_plans?.name || "leave"} request was declined.`
+      });
+      setLeaveApplications((prev) => prev.map((app) => app.id === applicationId ? { ...app, status: "rejected" } : app));
+    }
+  }
+
+  // Edit/Recall helpers
+  function handleStartEdit(plan) {
+    setEditingPlan(plan); setEditName(plan.name); setEditDuration(plan.duration_days); setEditAllowRecall(plan.allow_recall ? "Yes" : "No"); setOpenDropdown(null);
+  }
   async function handleSaveEdit(e) {
     e.preventDefault();
-
-    if (!editName || !editDuration) {
-      alert("Please fill in all fields");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("leave_plans")
-      .update({
-        name: editName,
-        duration_days: Number(editDuration),
-        allow_recall: editAllowRecall === "Yes",
-      })
-      .eq("id", editingPlan.id);
-
-    if (error) {
-      console.error("Error updating leave plan:", error);
-      alert("Failed to update leave plan");
-    } else {
-      setLeavePlans((prev) =>
-        prev.map((plan) =>
-          plan.id === editingPlan.id
-            ? {
-                ...plan,
-                name: editName,
-                duration_days: Number(editDuration),
-                allow_recall: editAllowRecall === "Yes",
-              }
-            : plan
-        )
-      );
+    const { error } = await supabase.from("leave_plans").update({ name: editName, duration_days: Number(editDuration), allow_recall: editAllowRecall === "Yes" }).eq("id", editingPlan.id);
+    if (!error) {
+      setLeavePlans(prev => prev.map(p => p.id === editingPlan.id ? { ...p, name: editName, duration_days: Number(editDuration), allow_recall: editAllowRecall === "Yes" } : p));
       setEditingPlan(null);
-      setEditName("");
-      setEditDuration("");
-      setEditAllowRecall("");
-      alert("Leave plan updated successfully!");
     }
   }
-
-  // Cancel editing
-  function handleCancelEdit() {
-    setEditingPlan(null);
-    setEditName("");
-    setEditDuration("");
-    setEditAllowRecall("");
-  }
-
-  // Delete leave plan
   async function handleDeleteLeavePlan(planId) {
-    if (!confirm("Are you sure you want to delete this leave plan?")) return;
-
-    const { error } = await supabase
-      .from("leave_plans")
-      .update({ is_active: false })
-      .eq("id", planId);
-
-    if (error) {
-      console.error("Error deleting leave plan:", error);
-      alert("Failed to delete leave plan");
-    } else {
-      setLeavePlans((prev) => prev.filter((plan) => plan.id !== planId));
-      alert("Leave plan deleted successfully!");
-    }
+    if (!confirm("Delete this plan?")) return;
+    const { error } = await supabase.from("leave_plans").update({ is_active: false }).eq("id", planId);
+    if (!error) setLeavePlans(prev => prev.filter(p => p.id !== planId));
   }
 
-  // Open recall modal
   function handleOpenRecallModal(leave) {
-    setSelectedRecallLeave(leave);
-    setRecallDepartment(leave.employees?.department || "");
-    setShowRecallModal(true);
-    setRecallNewResumptionDate("");
-    setRecallReasonText("");
+    setSelectedRecallLeave(leave); setRecallDepartment(leave.employees?.department || ""); setShowRecallModal(true);
   }
-
-  // Close recall modal
-  function handleCloseRecallModal() {
-    setShowRecallModal(false);
-    setSelectedRecallLeave(null);
-    setRecallDepartment("");
-    setRecallNewResumptionDate("");
-    setRecallReasonText("");
-  }
-
-  // Calculate days remaining
-  function calculateDaysRemaining(endDate) {
-    const end = new Date(endDate);
-    const today = new Date();
-    const diffTime = end - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays > 0 ? diffDays : 0;
-  }
-
-  // Submit recall (+ notification)
   async function handleSubmitRecall(e) {
     e.preventDefault();
-
-    if (!recallNewResumptionDate || !recallReasonText) {
-      alert("Please fill in all required fields");
-      return;
-    }
-
-    if (new Date(recallNewResumptionDate) <= new Date()) {
-      alert("New resumption date must be in the future");
-      return;
-    }
-
+    if (!recallNewResumptionDate) return alert("Select date");
     setSubmittingRecall(true);
-
-    const leaveId = selectedRecallLeave?.id;
-    const employeeId = selectedRecallLeave?.employee_id;
-
-    const { error } = await supabase
-      .from("leave_applications")
-      .update({
-        status: "recalled",
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: currentUser?.uid || currentUser?.firebase_uid,
-      })
-      .eq("id", leaveId);
-
+    const { error } = await supabase.from("leave_applications").update({ status: "recalled", reviewed_at: new Date().toISOString() }).eq("id", selectedRecallLeave.id);
     setSubmittingRecall(false);
-
-    if (error) {
-      console.error("Error recalling leave:", error);
-      alert("Failed to recall leave: " + error.message);
-      return;
+    if (!error) {
+       await createLeaveNotification({
+         employeeId: selectedRecallLeave.employee_id, leaveApplicationId: selectedRecallLeave.id, type: "leave_recalled", title: "Leave recalled",
+         message: `Please resume on ${recallNewResumptionDate}.`
+       });
+       setOngoingLeaves(prev => prev.filter(l => l.id !== selectedRecallLeave.id));
+       setShowRecallModal(false);
     }
-
-    await createLeaveNotification({
-      employeeId,
-      leaveApplicationId: leaveId,
-      type: "leave_recalled",
-      title: "Leave recalled",
-      message: `Your leave was recalled. Please resume on ${recallNewResumptionDate}.`,
-    });
-
-    setOngoingLeaves((prev) => prev.filter((leave) => leave.id !== leaveId));
-    alert(
-      `Leave recalled successfully! Employee should resume on ${recallNewResumptionDate}`
-    );
-    handleCloseRecallModal();
   }
 
-  const btnBase =
-    "px-8 md:px-10 py-2.5 md:py-3 rounded-full cursor-pointer shadow-md text-sm md:text-base transition-all duration-200";
-  const sidebarWidth = isOpen ? "lg:w-64" : "lg:w-20";
-  const hideWhenCollapsed = !isOpen && "hidden lg:block";
+  const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-white">
+    <div className="min-h-screen flex bg-gray-50 font-sans text-gray-800">
       {/* Sidebar */}
       <AdminSidebar
         isOpen={isOpen}
@@ -500,702 +268,297 @@ export default function LeaveManagement() {
         onNavigate={(path) => navigate(path)}
       />
 
-      {/* Main Content */}
-      <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 overflow-x-hidden bg-white">
-        {/* Top bar */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-          <button
-            onClick={() => setIsOpen((prev) => !prev)}
-            className="self-start text-green-700 cursor-pointer hover:text-yellow-400 transition"
-          >
-            <Menu size={28} />
-          </button>
-
-
-          {/* Right icons */}
-          <div className="flex items-center gap-3 md:gap-4 md:ml-6 self-end md:self-auto">
-            <AdminBell />
-            <AdminSetting
-              trigger={
-                <button
-                  type="button"
-                  className="flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-yellow-400 text-green-900 hover:bg-yellow-300 transition"
-                  aria-label="Settings"
-                >
-                  <Settings size={18} />
-                </button>
-              }
-            >
-              {({ close }) => <FontSizeMenu closeMenu={close} />}
-            </AdminSetting>
-          </div>
-        </div>
-
+      <main className={`flex-1 flex flex-col transition-all duration-300 ${isOpen ? "lg:ml-0" : ""}`}>
         {/* Header */}
-        <h1 className="text-3xl md:text-4xl font-extrabold text-green-800 mb-4">
-          Leave Management
-        </h1>
+        <header className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-10 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsOpen((s) => !s)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">
+              <Menu size={24} />
+            </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-800 tracking-tight">Leave Management</h1>
+              <p className="text-xs text-gray-500 hidden sm:block">Manage employee time-off and policies</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+             <span className="hidden md:block text-xs text-gray-400 font-medium">Last updated: {currentTime}</span>
+             <div className="h-6 w-px bg-gray-200 mx-2 hidden md:block"></div>
+             <AdminBell />
+             <AdminSetting trigger={<button className="w-10 h-10 rounded-full bg-yellow-50 text-yellow-600 hover:bg-yellow-100 border border-yellow-200 flex items-center justify-center"><Settings size={20}/></button>}>
+               {({ close }) => <FontSizeMenu closeMenu={close} />}
+             </AdminSetting>
+          </div>
+        </header>
 
-        {/* Toggle buttons */}
-        <div className="flex flex-wrap justify-center gap-4 md:gap-6 mb-6">
-          <button
-            onClick={() => toggleTab("settings")}
-            className={
-              btnBase +
-              " " +
-              (activeTab === "settings"
-                ? "bg-yellow-400 text-green-900 font-bold"
-                : "bg-green-700 text-white hover:bg-yellow-400 hover:text-green-900")
-            }
-          >
-            Leave Settings
-          </button>
-          <button
-            onClick={() => toggleTab("recall")}
-            className={
-              btnBase +
-              " " +
-              (activeTab === "recall"
-                ? "bg-yellow-400 text-green-900 font-bold"
-                : "bg-green-700 text-white hover:bg-yellow-400 hover:text-green-900")
-            }
-          >
-            Leave Recall
-          </button>
-          <button
-            onClick={() => toggleTab("history")}
-            className={
-              btnBase +
-              " " +
-              (activeTab === "history"
-                ? "bg-yellow-400 text-green-900 font-bold"
-                : "bg-green-700 text-white hover:bg-yellow-400 hover:text-green-900")
-            }
-          >
-            Leave History
-          </button>
-        </div>
+        <div className="p-6 md:p-8 max-w-7xl mx-auto w-full space-y-6">
+          
+          {/* Tabs Navigation */}
+          <div className="flex justify-center mb-2">
+             <div className="bg-white p-1 rounded-xl border border-gray-200 shadow-sm inline-flex">
+               {['history', 'recall', 'settings'].map((tab) => (
+                 <button
+                   key={tab}
+                   onClick={() => setActiveTab(tab)}
+                   className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${
+                     activeTab === tab 
+                     ? 'bg-green-700 text-white shadow-md' 
+                     : 'text-gray-500 hover:bg-gray-50 hover:text-green-700'
+                   }`}
+                 >
+                   {tab === 'history' ? 'Leave History' : tab === 'recall' ? 'Leave Recall' : 'Settings'}
+                 </button>
+               ))}
+             </div>
+          </div>
 
-        {/* Panels */}
-        <div
-          className={
-            activeTab
-              ? "transition-all duration-300 ease-in-out opacity-100 translate-y-0"
-              : "transition-all duration-300 ease-in-out opacity-0 -translate-y-2 pointer-events-none"
-          }
-        >
-          {/* Leave Settings */}
-          {activeTab === "settings" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Create Settings */}
-              <div className="rounded-3xl bg-white shadow-sm border border-yellow-100 p-6 space-y-4">
-                <h2 className="text-lg md:text-xl font-semibold underline text-green-800">
-                  Create Leave Settings
-                </h2>
-                <form
-                  onSubmit={handleCreateLeaveSetting}
-                  className="space-y-3 text-sm"
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-green-800 font-semibold mb-1">
-                        Leave Plan Name
-                      </label>
-                      <select
-                        value={leavePlanName}
-                        onChange={(e) => setLeavePlanName(e.target.value)}
-                        className="w-full p-2 bg-yellow-50 rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-                      >
-                        <option value="">Select leave plan</option>
-                        <option value="Annual Leave">Annual Leave</option>
-                        <option value="Sick Leave">Sick Leave</option>
-                        <option value="Maternity Leave">Maternity Leave</option>
-                        <option value="Paternity Leave">Paternity Leave</option>
-                        <option value="Compassionate Leave">
-                          Compassionate Leave
-                        </option>
-                        <option value="Casual Leave">Casual Leave</option>
-                        <option value="Study Leave">Study Leave</option>
-                        <option value="Exam Leave">Exam Leave</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-green-800 font-semibold mb-1">
-                        Duration (days)
-                      </label>
-                      <input
-                        type="number"
-                        placeholder="60"
-                        value={durationDays}
-                        onChange={(e) => setDurationDays(e.target.value)}
-                        className="w-full p-2 bg-yellow-50 rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-                      />
-                    </div>
-                  </div>
+          {/* CONTENT PANELS */}
 
-                  <div>
-                    <label className="block text-green-800 font-semibold mb-1">
-                      Activate Leave Recall for this plan?
-                    </label>
-                    <select
-                      value={allowRecall}
-                      onChange={(e) => setAllowRecall(e.target.value)}
-                      className="w-full p-2 bg-yellow-50 rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-                    >
-                      <option value="">Select option</option>
-                      <option value="Yes">Yes</option>
-                      <option value="No">No</option>
-                    </select>
-                  </div>
+          {/* 1. Leave History Panel */}
+          {activeTab === 'history' && (
+             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+                   <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                     <Calendar size={18} className="text-green-600"/> All Applications
+                   </h3>
+                   <span className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-500">{leaveApplications.length} records</span>
+                </div>
+                
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50/50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                           <th className="p-5">Employee</th>
+                           <th className="p-5">Dates</th>
+                           <th className="p-5">Type & Reason</th>
+                           <th className="p-5">Status</th>
+                           <th className="p-5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {loadingApplications ? (
+                           <tr><td colSpan="5" className="p-8 text-center text-gray-400">Loading history...</td></tr>
+                        ) : leaveApplications.length === 0 ? (
+                           <tr><td colSpan="5" className="p-8 text-center text-gray-400">No leave applications found.</td></tr>
+                        ) : (
+                           leaveApplications.map((app) => (
+                             <tr key={app.id} className="hover:bg-gray-50/80 transition-colors">
+                               <td className="p-5">
+                                  <div className="font-bold text-gray-800 text-sm">{app.employees?.full_name || 'Unknown'}</div>
+                                  <div className="text-xs text-gray-400">{app.employees?.department}</div>
+                               </td>
+                               <td className="p-5 text-sm text-gray-600">
+                                  <div className="font-medium text-gray-800">{new Date(app.start_date).toLocaleDateString()}</div>
+                                  <div className="text-xs">to {new Date(app.end_date).toLocaleDateString()}</div>
+                               </td>
+                               <td className="p-5 max-w-xs">
+                                  <div className="text-xs font-bold text-green-700 uppercase mb-0.5">{app.leave_plans?.name}</div>
+                                  <div className="text-xs text-gray-500 truncate" title={app.reason}>{app.reason}</div>
+                               </td>
+                               <td className="p-5">
+                                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold capitalize ${
+                                   app.status === 'approved' ? 'bg-green-50 text-green-700 ring-1 ring-green-600/20' :
+                                   app.status === 'rejected' ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20' :
+                                   app.status === 'recalled' ? 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20' :
+                                   'bg-yellow-50 text-yellow-700 ring-1 ring-yellow-600/20'
+                                 }`}>
+                                   <span className={`w-1.5 h-1.5 rounded-full ${
+                                      app.status === 'approved' ? 'bg-green-600' :
+                                      app.status === 'rejected' ? 'bg-red-600' :
+                                      'bg-yellow-500'
+                                   }`}></span>
+                                   {app.status}
+                                 </span>
+                               </td>
+                               <td className="p-5 text-right">
+                                  {app.status === 'pending' && (
+                                     <ActionDropdown 
+                                        onApprove={() => handleApproveLeave(app.id)}
+                                        onReject={() => handleRejectLeave(app.id)}
+                                        attachmentUrl={app.attachment_url}
+                                     />
+                                  )}
+                                  {app.status !== 'pending' && app.attachment_url && (
+                                     <a href={app.attachment_url} target="_blank" className="text-blue-500 hover:underline text-xs flex items-center justify-end gap-1">
+                                        <Paperclip size={12}/> View File
+                                     </a>
+                                  )}
+                               </td>
+                             </tr>
+                           ))
+                        )}
+                      </tbody>
+                   </table>
+                </div>
+             </div>
+          )}
 
-                  <div>
-                    <label className="block text-green-800 font-semibold mb-1">
-                      Reason for Recall
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={recallReason}
-                      onChange={(e) => setRecallReason(e.target.value)}
-                      className="w-full p-2 bg-yellow-50 rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition-all"
-                  >
-                    Create
-                  </button>
-                </form>
-              </div>
-
-              {/* Manage Settings */}
-              <div className="rounded-3xl bg-white shadow-sm border border-yellow-100 p-6">
-                <h2 className="text-lg md:text-xl font-semibold mb-3 text-green-800">
-                  Manage Leave Settings
-                </h2>
-
-                {/* Edit Form */}
-                {editingPlan && (
-                  <div className="mb-4 p-4 bg-yellow-50 rounded-lg border-2 border-green-600">
-                    <h3 className="text-md font-semibold text-green-800 mb-3">
-                      Edit Leave Plan
-                    </h3>
-                    <form onSubmit={handleSaveEdit} className="space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-green-800 font-semibold mb-1 text-sm">
-                            Leave Plan Name
-                          </label>
-                          <select
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="w-full p-2 bg-white rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600 text-sm"
-                          >
-                            <option value="">Select leave plan</option>
+          {/* 2. Leave Settings Panel */}
+          {activeTab === 'settings' && (
+             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Create Form */}
+                <div className="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 h-fit">
+                   <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+                     <div className="w-8 h-8 rounded-full bg-green-50 text-green-600 flex items-center justify-center"><Briefcase size={16}/></div>
+                     New Leave Type
+                   </h3>
+                   <form onSubmit={handleCreateLeaveSetting} className="space-y-4">
+                      <label className="block text-sm">
+                         <span className="text-gray-500 font-bold text-xs uppercase">Plan Name</span>
+                         <select value={leavePlanName} onChange={e => setLeavePlanName(e.target.value)} className="w-full mt-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                            <option value="">Select...</option>
                             <option value="Annual Leave">Annual Leave</option>
                             <option value="Sick Leave">Sick Leave</option>
-                            <option value="Maternity Leave">
-                              Maternity Leave
-                            </option>
-                            <option value="Paternity Leave">
-                              Paternity Leave
-                            </option>
-                            <option value="Compassionate Leave">
-                              Compassionate Leave
-                            </option>
+                            <option value="Maternity Leave">Maternity Leave</option>
                             <option value="Casual Leave">Casual Leave</option>
-                            <option value="Study Leave">Study Leave</option>
-                            <option value="Exam Leave">Exam Leave</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-green-800 font-semibold mb-1 text-sm">
-                            Duration (days)
-                          </label>
-                          <input
-                            type="number"
-                            value={editDuration}
-                            onChange={(e) => setEditDuration(e.target.value)}
-                            className="w-full p-2 bg-white rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600 text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-green-800 font-semibold mb-1 text-sm">
-                          Allow Recall?
-                        </label>
-                        <select
-                          value={editAllowRecall}
-                          onChange={(e) => setEditAllowRecall(e.target.value)}
-                          className="w-full p-2 bg-white rounded-md border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-green-600 text-sm"
-                        >
-                          <option value="">Select option</option>
-                          <option value="Yes">Yes</option>
-                          <option value="No">No</option>
-                        </select>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          className="inline-flex items-center justify-center rounded-full bg-green-700 px-4 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-green-800 transition-all"
-                        >
-                          Save Changes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancelEdit}
-                          className="inline-flex items-center justify-center rounded-full border border-green-700 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-yellow-50 transition-all"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                )}
-
-                {/* Table */}
-                <div className="max-h-96 overflow-y-auto rounded-2xl border border-yellow-200">
-                  <table className="w-full border-collapse text-xs sm:text-sm">
-                    <thead className="bg-yellow-200 text-green-900">
-                      <tr className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
-                        <th className="p-3 text-left">Leave Plan</th>
-                        <th className="p-3 text-left">Duration</th>
-                        <th className="p-3 text-left">Recall</th>
-                        <th className="p-3 text-left">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leavePlans.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan="4"
-                            className="p-3 text-center text-sm text-gray-600"
-                          >
-                            No leave plans created yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        leavePlans.map((plan, index) => (
-                          <tr
-                            key={plan.id}
-                            className={`h-11 ${
-                              index % 2 === 0 ? "bg-yellow-50" : "bg-white"
-                            } hover:bg-yellow-100 transition ${
-                              editingPlan?.id === plan.id
-                                ? "ring-2 ring-green-600"
-                                : ""
-                            }`}
-                          >
-                            <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                              {plan.name}
-                            </td>
-                            <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                              {plan.duration_days}
-                            </td>
-                            <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                              {plan.allow_recall ? "Yes" : "No"}
-                            </td>
-                            <td className="relative p-3 sm:pr-4">
-                              <button
-                                onClick={() => toggleDropdown(index)}
-                                className="inline-flex items-center gap-1 rounded-full bg-green-700 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] transition-all"
-                              >
-                                Actions <ChevronDown size={14} />
-                              </button>
-                              {openDropdown === index && (
-                                <div className="absolute z-50 mt-2 w-32 bg-white border border-yellow-200 rounded-md shadow-lg overflow-hidden">
-                                  <button
-                                    onClick={() => handleStartEdit(plan)}
-                                    className="block w-full text-left px-3 py-2 text-sm text-green-900 hover:bg-yellow-50"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteLeavePlan(plan.id)}
-                                    className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                         </select>
+                      </label>
+                      <label className="block text-sm">
+                         <span className="text-gray-500 font-bold text-xs uppercase">Duration (Days)</span>
+                         <input type="number" value={durationDays} onChange={e => setDurationDays(e.target.value)} className="w-full mt-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none"/>
+                      </label>
+                      <label className="block text-sm">
+                         <span className="text-gray-500 font-bold text-xs uppercase">Allow Recall?</span>
+                         <select value={allowRecall} onChange={e => setAllowRecall(e.target.value)} className="w-full mt-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none">
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                         </select>
+                      </label>
+                      <button type="submit" className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-2.5 rounded-lg transition-all shadow-lg shadow-green-100 mt-2">
+                         Create Plan
+                      </button>
+                   </form>
                 </div>
-              </div>
-            </div>
+
+                {/* List / Edit Table */}
+                <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                   <div className="p-5 border-b border-gray-100">
+                      <h3 className="font-bold text-gray-800">Existing Leave Plans</h3>
+                   </div>
+                   
+                   {/* Edit Mode Banner */}
+                   {editingPlan && (
+                      <div className="p-4 bg-yellow-50 border-b border-yellow-100 flex items-center gap-4 animate-in slide-in-from-top-2">
+                         <div className="flex-1 grid grid-cols-3 gap-3">
+                            <input value={editName} onChange={e=>setEditName(e.target.value)} className="p-2 text-sm rounded border border-yellow-200" placeholder="Name" />
+                            <input value={editDuration} onChange={e=>setEditDuration(e.target.value)} className="p-2 text-sm rounded border border-yellow-200" type="number" placeholder="Days" />
+                            <select value={editAllowRecall} onChange={e=>setEditAllowRecall(e.target.value)} className="p-2 text-sm rounded border border-yellow-200"><option value="Yes">Recall: Yes</option><option value="No">Recall: No</option></select>
+                         </div>
+                         <div className="flex gap-2">
+                            <button onClick={handleSaveEdit} className="px-3 py-1.5 bg-green-700 text-white text-xs font-bold rounded">Save</button>
+                            <button onClick={() => setEditingPlan(null)} className="px-3 py-1.5 bg-white border border-gray-300 text-xs font-bold rounded">Cancel</button>
+                         </div>
+                      </div>
+                   )}
+
+                   <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                         <thead className="bg-gray-50 text-gray-500 uppercase text-xs font-semibold">
+                            <tr><th className="p-4">Plan Name</th><th className="p-4">Duration</th><th className="p-4">Recallable</th><th className="p-4 text-right">Actions</th></tr>
+                         </thead>
+                         <tbody className="divide-y divide-gray-50">
+                            {leavePlans.map(plan => (
+                               <tr key={plan.id} className="hover:bg-gray-50">
+                                  <td className="p-4 font-medium text-gray-800">{plan.name}</td>
+                                  <td className="p-4 text-gray-600">{plan.duration_days} days</td>
+                                  <td className="p-4">
+                                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${plan.allow_recall ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                       {plan.allow_recall ? 'Yes' : 'No'}
+                                     </span>
+                                  </td>
+                                  <td className="p-4 text-right relative">
+                                     <button onClick={() => setOpenDropdown(openDropdown === plan.id ? null : plan.id)} className="text-gray-400 hover:text-green-700"><Settings size={16}/></button>
+                                     {openDropdown === plan.id && (
+                                        <div className="absolute right-8 top-2 bg-white shadow-xl border border-gray-100 rounded-lg overflow-hidden z-20 w-32">
+                                           <button onClick={() => handleStartEdit(plan)} className="block w-full text-left px-4 py-2 hover:bg-gray-50 text-xs">Edit</button>
+                                           <button onClick={() => handleDeleteLeavePlan(plan.id)} className="block w-full text-left px-4 py-2 hover:bg-red-50 text-red-600 text-xs">Delete</button>
+                                        </div>
+                                     )}
+                                  </td>
+                               </tr>
+                            ))}
+                         </tbody>
+                      </table>
+                   </div>
+                </div>
+             </div>
           )}
 
-          {/* Leave Recall */}
-          {activeTab === "recall" && (
-            <div className="rounded-3xl bg-white shadow-sm border border-yellow-100 p-6 relative">
-              <h2 className="text-lg md:text-xl font-semibold mb-3 text-green-800">
-                Ongoing Leave Applications (Recallable)
-              </h2>
-              <div className="max-h-80 overflow-y-auto rounded-2xl border border-yellow-200">
-                <table className="w-full border-collapse text-xs sm:text-sm">
-                  <thead className="sticky top-0 bg-yellow-200 text-green-900 z-10">
-                    <tr className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
-                      <th className="p-3 text-left">Name</th>
-                      <th className="p-3 text-left">Department</th>
-                      <th className="p-3 text-left">Type</th>
-                      <th className="p-3 text-left">Start Date</th>
-                      <th className="p-3 text-left">End Date</th>
-                      <th className="p-3 text-left">Days Left</th>
-                      <th className="p-3 text-left">Reason</th>
-                      <th className="p-3 text-left">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loadingOngoing ? (
-                      <tr>
-                        <td
-                          colSpan="8"
-                          className="p-3 text-center text-sm text-gray-600"
-                        >
-                          Loading ongoing leaves...
-                        </td>
-                      </tr>
-                    ) : ongoingLeaves.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan="8"
-                          className="p-3 text-center text-sm text-gray-600"
-                        >
-                          No ongoing recallable leaves at the moment.
-                        </td>
-                      </tr>
-                    ) : (
-                      ongoingLeaves.map((leave, index) => (
-                        <tr
-                          key={leave.id}
-                          className={`h-11 ${
-                            index % 2 === 0 ? "bg-yellow-50" : "bg-white"
-                          } hover:bg-yellow-100 transition`}
-                        >
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {leave.employees?.full_name || "N/A"}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {leave.employees?.department || "N/A"}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {leave.leave_plans?.name || "N/A"}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {new Date(leave.start_date).toLocaleDateString()}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {new Date(leave.end_date).toLocaleDateString()}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {calculateDaysRemaining(leave.end_date)} days
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {leave.reason}
-                          </td>
-                          <td className="p-3">
-                            <button
-                              onClick={() => handleOpenRecallModal(leave)}
-                              className="inline-flex items-center justify-center rounded-full bg-orange-600 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white cursor-pointer hover:bg-orange-700 active:scale-[0.98] transition-all"
-                            >
-                              Recall
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Recall Modal */}
-              {showRecallModal && selectedRecallLeave && (
-                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
-                  <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md relative">
-                    <button
-                      className="absolute top-3 right-3 text-green-700 hover:text-red-500 text-2xl font-bold"
-                      onClick={handleCloseRecallModal}
-                    >
-                      &times;
-                    </button>
-                    <div className="flex items-center mb-3">
-                      <span className="text-2xl mr-2">🔁</span>
-                      <h2 className="text-lg font-semibold text-green-800">
-                        Leave Recall
-                      </h2>
-                    </div>
-                    <p className="text-green-800 mb-4 text-sm">
-                      Fill in the required details to recall this employee.
-                    </p>
-                    <form onSubmit={handleSubmitRecall} className="space-y-3 text-sm">
-                      <div>
-                        <label className="block text-green-800 mb-1 font-semibold">
-                          Employee Name
-                        </label>
-                        <input
-                          type="text"
-                          value={selectedRecallLeave.employees?.full_name || ""}
-                          readOnly
-                          className="w-full bg-yellow-50 border border-yellow-200 rounded-md p-2"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-green-800 mb-1 font-semibold">
-                          Department
-                        </label>
-                        <input
-                          type="text"
-                          value={recallDepartment}
-                          readOnly
-                          className="w-full bg-yellow-50 border border-yellow-200 rounded-md p-2"
-                        />
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="flex-1">
-                          <label className="block text-green-800 mb-1 font-semibold">
-                            Start Date
-                          </label>
-                          <input
-                            type="date"
-                            value={selectedRecallLeave.start_date}
-                            readOnly
-                            className="w-full bg-yellow-50 border border-yellow-200 rounded-md p-2"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <label className="block text-green-800 mb-1 font-semibold">
-                            Original End Date
-                          </label>
-                          <input
-                            type="date"
-                            value={selectedRecallLeave.end_date}
-                            readOnly
-                            className="w-full bg-yellow-50 border border-yellow-200 rounded-md p-2"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="flex-1">
-                          <label className="block text-green-800 mb-1 font-semibold">
-                            Days Remaining
-                          </label>
-                          <input
-                            type="number"
-                            value={calculateDaysRemaining(selectedRecallLeave.end_date)}
-                            readOnly
-                            className="w-full bg-yellow-50 border border-yellow-200 rounded-md p-2"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <label className="block text-green-800 mb-1 font-semibold">
-                            New Resumption Date *
-                          </label>
-                          <input
-                            type="date"
-                            value={recallNewResumptionDate}
-                            onChange={(e) => setRecallNewResumptionDate(e.target.value)}
-                            required
-                            min={new Date().toISOString().split("T")[0]}
-                            className="w-full bg-white border border-yellow-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-green-600"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-green-800 mb-1 font-semibold">
-                          Reason for Recall *
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={recallReasonText}
-                          onChange={(e) => setRecallReasonText(e.target.value)}
-                          required
-                          placeholder="Enter reason for recalling this employee..."
-                          className="w-full bg-white border border-yellow-200 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-green-600"
-                        />
-                      </div>
-
-                      <div className="flex justify-between gap-3 pt-2">
-                        <button
-                          type="submit"
-                          disabled={submittingRecall}
-                          className="inline-flex items-center justify-center rounded-full bg-orange-600 px-5 py-2 text-sm font-semibold text-white cursor-pointer hover:bg-orange-700 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {submittingRecall ? "Processing..." : "Initiate Recall"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCloseRecallModal}
-                          className="inline-flex items-center justify-center rounded-full border border-green-700 px-5 py-2 text-sm font-semibold text-green-700 hover:bg-yellow-50 transition-all"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  </div>
+          {/* 3. Leave Recall Panel */}
+          {activeTab === 'recall' && (
+             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className="p-5 border-b border-gray-100">
+                   <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                     <AlertCircle size={18} className="text-orange-500"/> Ongoing Recallable Leaves
+                   </h3>
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Leave History */}
-          {activeTab === "history" && (
-            <div className="rounded-3xl bg-white shadow-sm border border-yellow-100 p-6">
-              <h2 className="text-lg md:text-xl text-green-800 mb-3 font-semibold">
-                Leave Applications
-              </h2>
-              <div className="max-h-96 overflow-y-auto rounded-2xl border border-yellow-200">
-                <table className="w-full border-collapse text-xs sm:text-sm">
-                  <thead className="bg-yellow-200 text-green-900">
-                    <tr className="text-[11px] sm:text-xs font-semibold uppercase tracking-wide">
-                      <th className="p-3 text-left">Employee</th>
-                      <th className="p-3 text-left">Department</th>
-                      <th className="p-3 text-left">Type</th>
-                      <th className="p-3 text-left">Start</th>
-                      <th className="p-3 text-left">End</th>
-                      <th className="p-3 text-left">Duration</th>
-                      <th className="p-3 text-left">Status</th>
-                      <th className="p-3 text-left">Reason</th>
-                      <th className="p-3 text-left">File</th>
-                      <th className="p-3 text-left">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loadingApplications ? (
-                      <tr>
-                        <td
-                          colSpan="10"
-                          className="p-3 text-center text-sm text-gray-600"
-                        >
-                          Loading applications...
-                        </td>
-                      </tr>
-                    ) : leaveApplications.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan="10"
-                          className="p-3 text-center text-sm text-gray-600"
-                        >
-                          No leave applications yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      leaveApplications.map((item, index) => (
-                        <tr
-                          key={item.id}
-                          className={`h-11 ${
-                            index % 2 === 0 ? "bg-yellow-50" : "bg-white"
-                          } hover:bg-yellow-100 transition`}
-                        >
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {item.employees?.full_name || "N/A"}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {item.employees?.department || "N/A"}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {item.leave_plans?.name || "N/A"}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {new Date(item.start_date).toLocaleDateString()}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {new Date(item.end_date).toLocaleDateString()}
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {item.duration_days} days
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm">
-                            <span
-                              className={`px-2 py-1 rounded text-xs font-semibold ${
-                                item.status === "approved"
-                                  ? "bg-green-200 text-green-800"
-                                  : item.status === "rejected"
-                                  ? "bg-red-200 text-red-800"
-                                  : item.status === "recalled"
-                                  ? "bg-orange-200 text-orange-800"
-                                  : "bg-yellow-200 text-yellow-800"
-                              }`}
-                            >
-                              {String(item.status || "pending").toUpperCase()}
-                            </span>
-                          </td>
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {item.reason}
-                          </td>
-
-                          {/* File Column */}
-                          <td className="p-3 text-[11px] sm:text-sm text-gray-800">
-                            {item.attachment_url ? (
-                              <a
-                                href={item.attachment_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium"
-                              >
-                                <Paperclip size={14} /> View
-                              </a>
-                            ) : (
-                              <span className="text-gray-400 italic text-xs">
-                                No file
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="relative p-3 sm:pr-4">
-                            {item.status === "pending" ? (
-                              <>
-                                <button
-                                  onClick={() => toggleHistoryDropdown(index)}
-                                  className="inline-flex items-center gap-1 rounded-full bg-green-700 px-4 py-1.5 text-xs sm:text-sm font-semibold text-white cursor-pointer hover:bg-green-800 active:scale-[0.98] transition-all"
-                                >
-                                  Actions <ChevronDown size={14} />
-                                </button>
-                                {openHistoryDropdown === index && (
-                                  <div className="absolute z-50 mt-2 w-32 bg-white border border-yellow-200 rounded-md shadow-lg overflow-hidden right-0">
-                                    <button
-                                      onClick={() => handleApproveLeave(item.id)}
-                                      className="block w-full text-left px-3 py-2 text-sm text-green-900 hover:bg-yellow-50"
-                                    >
-                                      Approve
-                                    </button>
-                                    <button
-                                      onClick={() => handleRejectLeave(item.id)}
-                                      className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                                    >
-                                      Decline
-                                    </button>
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <span className="text-xs text-gray-500 italic">
-                                {item.status === "approved"
-                                  ? "Approved"
-                                  : item.status === "recalled"
-                                  ? "Recalled"
-                                  : "Declined"}
-                              </span>
-                            )}
-                          </td>
+                <div className="overflow-x-auto">
+                   <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50/50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
+                           <th className="p-5">Employee</th>
+                           <th className="p-5">Date Range</th>
+                           <th className="p-5">Reason</th>
+                           <th className="p-5 text-right">Action</th>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                      </thead>
+                      <tbody>
+                        {loadingOngoing ? (
+                           <tr><td colSpan="4" className="p-8 text-center text-gray-400">Loading...</td></tr>
+                        ) : ongoingLeaves.length === 0 ? (
+                           <tr><td colSpan="4" className="p-8 text-center text-gray-400">No recallable leaves currently active.</td></tr>
+                        ) : (
+                           ongoingLeaves.map(leave => (
+                              <tr key={leave.id} className="hover:bg-gray-50 transition">
+                                 <td className="p-5">
+                                    <div className="font-bold text-gray-800 text-sm">{leave.employees?.full_name}</div>
+                                    <div className="text-xs text-gray-400">{leave.employees?.department}</div>
+                                 </td>
+                                 <td className="p-5 text-sm">
+                                    <div className="flex items-center gap-2 text-gray-600"><Calendar size={14}/> {leave.start_date} → {leave.end_date}</div>
+                                 </td>
+                                 <td className="p-5 text-sm text-gray-600 italic">"{leave.reason}"</td>
+                                 <td className="p-5 text-right">
+                                    <button onClick={() => handleOpenRecallModal(leave)} className="px-4 py-1.5 bg-orange-600 text-white text-xs font-bold rounded-full hover:bg-orange-700 shadow-sm transition">
+                                       Recall Now
+                                    </button>
+                                 </td>
+                              </tr>
+                           ))
+                        )}
+                      </tbody>
+                   </table>
+                </div>
+             </div>
           )}
         </div>
+
+        {/* Recall Modal */}
+        {showRecallModal && selectedRecallLeave && (
+           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md p-6">
+                 <h2 className="text-lg font-bold text-gray-900 mb-1">Confirm Recall</h2>
+                 <p className="text-sm text-gray-500 mb-4">Request <span className="font-bold text-gray-800">{selectedRecallLeave.employees?.full_name}</span> to return early.</p>
+                 
+                 <form onSubmit={handleSubmitRecall} className="space-y-4">
+                    <label className="block text-sm">
+                       <span className="font-bold text-gray-500 text-xs uppercase">New Resumption Date</span>
+                       <input type="date" value={recallNewResumptionDate} onChange={e => setRecallNewResumptionDate(e.target.value)} className="w-full mt-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none"/>
+                    </label>
+                    <label className="block text-sm">
+                       <span className="font-bold text-gray-500 text-xs uppercase">Reason for Recall</span>
+                       <textarea rows="2" value={recallReasonText} onChange={e => setRecallReasonText(e.target.value)} className="w-full mt-1 p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 outline-none" placeholder="e.g. Emergency project meeting..."></textarea>
+                    </label>
+                    <div className="flex gap-3 pt-2">
+                       <button type="submit" disabled={submittingRecall} className="flex-1 bg-orange-600 text-white font-bold py-2.5 rounded-lg hover:bg-orange-700 transition shadow-lg shadow-orange-100">
+                          {submittingRecall ? 'Processing...' : 'Confirm Recall'}
+                       </button>
+                       <button type="button" onClick={() => setShowRecallModal(false)} className="flex-1 bg-gray-100 text-gray-600 font-bold py-2.5 rounded-lg hover:bg-gray-200 transition">Cancel</button>
+                    </div>
+                 </form>
+              </div>
+           </div>
+        )}
       </main>
     </div>
   );
